@@ -26,7 +26,7 @@ cp .env.example .env       # fill in your local values
 - Type hints on all function signatures
 
 ### Naming
-- Tool functions: `snake_case` verbs — `build_cart`, `detect_patterns`
+- Tool functions: `snake_case` verbs — `build_cart`, `detect_patterns`, `execute_perishable_discount`
 - AlloyDB tables: `snake_case` nouns — `customer_profiles`, `purchase_orders`
 - BigQuery tables: `snake_case` nouns — `incidents`, `promotion_log`
 - Cloud Run services: `arc-{name}-{type}` — `arc-aria-agent`, `arc-pulse-tools`

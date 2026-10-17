@@ -1128,7 +1128,7 @@ aria_agent = Agent(
 | **Fri Oct 16** | Both | Schema design, mock data, GCP setup | AlloyDB + BigQuery ready with seed data |
 | **Sat Oct 17 AM** | Partner | ARIA tool functions (9 Cloud Run functions) | All ARIA tools tested individually |
 | **Sat Oct 17 PM** | You | ARIA agent wiring (ADK) + Streamlit chat UI | ARIA end-to-end working |
-| **Sat Oct 17 PM** | Partner | PULSE tool functions (5 Cloud Run functions) | All PULSE tools tested individually |
+| **Sat Oct 17 PM** | Partner | PULSE tool functions (6 Cloud Run functions) | All PULSE tools tested individually |
 | **Sun Oct 18 AM** | Both | PULSE agent wiring + Manager dashboard + BigQuery bridge test | Full end-to-end flow working |
 | **Sun Oct 18 PM** | You | Demo video (5 min) + Pitch deck (10 slides) + GitHub README | Submission package ready |
 | **Sun Oct 18 EOD** | You | Submit via AI Builder Cup portal | ✅ Submitted |

@@ -92,19 +92,38 @@ PULSE reads the incidents bridge and surfaces operational intelligence to store 
 
 ### 4.2 Tool execution sequence
 
+PULSE runs two parallel intelligence tracks on every cycle:
+
+**Track 1 — Stockout intelligence:**
 ```
-detect_patterns()  ← reads BigQuery incidents (last 48 hrs)
+detect_patterns()       ← reads BigQuery incidents (last 48 hrs)
       ↓
-find_root_cause()  ← cross-references AlloyDB replenishment_schedule
+find_root_cause()       ← cross-references AlloyDB replenishment_schedule
       ↓
-predict_stockout() ← BigQuery ML ARIMA_PLUS demand forecast
+predict_stockout()      ← BigQuery ML ARIMA_PLUS demand forecast
       ↓
-calculate_impact() ← revenue lost + revenue at risk (AED)
+calculate_impact()      ← revenue lost + revenue at risk (AED)
       ↓
 draft_purchase_order()  ← writes pending PO to AlloyDB
       ↓
 [surface to manager dashboard, wait for approval]
 ```
+
+**Track 2 — Perishable discount intelligence:**
+```
+execute_perishable_discount()
+      ↓ checks: days_to_expiry × daily_sales_rate < stock_quantity
+      ↓ [trigger condition met]
+calculates discount tier (15% / 25% / 40%)
+      ↓
+surfaces discount proposal to manager dashboard
+      ↓
+[manager approves → discount_active=True in AlloyDB]
+      ↓
+[ARIA surfaces discount to customers on next check_stock() call]
+```
+
+Both tracks run independently on every PULSE cycle. Stockout intelligence prevents future revenue loss. Perishable intelligence recovers current revenue at risk.
 
 ### 4.3 BigQuery ML integration
 `predict_stockout()` uses BigQuery ML's `ARIMA_PLUS` model:
@@ -291,7 +310,7 @@ Cloud Monitoring dashboard tracks: request count, p50/p95 latency, error rate pe
 | ARIA agent (ADK + system prompt) | Both | Python |
 | ARIA tool functions (9) | Partner | Python + Cloud Run |
 | PULSE agent (ADK + system prompt) | Both | Python |
-| PULSE tool functions (5) | Partner | Python + Cloud Run |
+| PULSE tool functions (6) | Partner | Python + Cloud Run |
 | AlloyDB schema + seed data | Partner | SQL |
 | BigQuery bridge + ML model | Partner | SQL + BigQuery ML |
 | ARIA customer app | You | Next.js 14 + Tailwind |

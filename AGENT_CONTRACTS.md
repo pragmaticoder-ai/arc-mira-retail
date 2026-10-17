@@ -529,3 +529,91 @@ evidence_summary: str
 ---
 
 *MIRA Retail · ARC v1.0 · Agent Contracts v1.1 — evidence citations added*
+
+---
+
+## PULSE tool functions — updated list (6 tools)
+
+| # | Tool | Purpose |
+|---|------|---------|
+| 1 | `detect_patterns()` | Stockout pattern detection from BigQuery incidents (last 48 hrs) |
+| 2 | `find_root_cause()` | Root cause analysis via AlloyDB replenishment schedule |
+| 3 | `predict_stockout()` | BigQuery ML ARIMA_PLUS demand forecast |
+| 4 | `calculate_impact()` | Revenue lost + at risk in AED |
+| 5 | `draft_purchase_order()` | PO draft for manager approval |
+| 6 | `execute_perishable_discount()` | **NEW** — velocity-based perishable discount trigger |
+
+---
+
+### 6. execute_perishable_discount
+
+**Purpose:** Detect perishable items whose sell-through velocity will not clear stock before expiry, and propose a tiered discount to the store manager.
+
+**Docstring:**
+```
+Checks perishable inventory items (is_perishable=True) where current
+sell-through velocity will not clear stock before expiry date.
+
+Trigger condition:
+  days_to_expiry × daily_sales_rate < current_stock_quantity
+
+When triggered, calculates the appropriate discount tier and surfaces
+a discount proposal to the manager dashboard for approval.
+Never auto-applies. Human approval required always.
+Once approved, sets discount_active=True in inventory so ARIA
+can surface the deal naturally to customers.
+
+Call on every PULSE run — not just on demand. Perishable waste
+is time-sensitive and cannot wait for a manual trigger.
+```
+
+**Discount tiers:**
+
+| Days to expiry | Discount |
+|----------------|----------|
+| 3 days | 15% |
+| 2 days | 25% |
+| 1 day | 40% |
+
+**Input:**
+```python
+store_id: str
+```
+
+**Output:**
+```python
+{
+    "perishable_alerts": [
+        {
+            "product_id": str,
+            "product_name": str,
+            "store_id": str,
+            "stock_quantity": int,
+            "expiry_date": str,
+            "days_to_expiry": int,
+            "daily_sales_rate": float,
+            "projected_sell_through": int,
+            "units_at_risk": int,
+            "revenue_at_risk_aed": float,
+            "discount_pct": float,
+            "discounted_price_aed": float,
+            "revenue_recoverable_aed": float,
+            "evidence": {
+                "data_source": "BigQuery incidents — 7-day velocity",
+                "expiry_source": "AlloyDB inventory.expiry_date",
+                "trigger_formula": "days_to_expiry × daily_sales_rate < stock_quantity"
+            },
+            "status": "pending",
+            "human_approval_required": True
+        }
+    ]
+}
+```
+
+> **Note:** This tool logs the discount intention only. In the prototype it writes
+> to AlloyDB for manager review. In production it would interface directly with
+> the pricing and inventory management system.
+
+---
+
+*MIRA Retail · ARC v1.0 · Agent Contracts v1.2 — perishable discount tool added*

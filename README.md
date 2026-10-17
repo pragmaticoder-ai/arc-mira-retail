@@ -1,6 +1,12 @@
 # ARC — Agentic Retail Command
 > AI-powered closed-loop retail intelligence for MIRA Retail
 
+**Team:** Pragmatic Engineers  
+**Competition:** AI Builder Cup 2026 — Retail & Commerce Theme  
+**Submission deadline:** Sunday, October 18, 2026
+
+---
+
 ## What is ARC?
 
 ARC is a two-agent AI system that closes the loop between customer experience and retail operations at MIRA Retail — a modern UAE grocery chain.
@@ -32,7 +38,7 @@ Google ADK + Gemini 1.5 Pro            Google ADK + Gemini 1.5 Pro
 Vertex AI Agent Engine                 Vertex AI Agent Engine
         │                                        │
         ▼                                        ▼
-ARIA tool functions (9)                PULSE tool functions (5)
+ARIA tool functions (9)                PULSE tool functions (6)
 Cloud Run Functions · Python           Cloud Run Functions · Python
         │                                        │
         ▼                                        ▼
@@ -176,7 +182,7 @@ gcloud config set project mira-arc-hackathon
 | Agent framework | Google ADK (`google-adk`) |
 | LLM | Gemini 1.5 Pro + Gemini 1.5 Flash (Vertex AI) |
 | Agent hosting | Vertex AI Agent Engine |
-| Tool execution | Cloud Run Functions (Python) |
+| Tool execution | Cloud Run Functions (Python) — 9 ARIA + 6 PULSE |
 | Operational DB | AlloyDB for PostgreSQL + AlloyDB AI (ScaNN vector) |
 | Analytics bridge | BigQuery + BigQuery ML |
 | ARIA frontend | Next.js 14 (App Router, TypeScript, Tailwind CSS) |
@@ -192,11 +198,12 @@ gcloud config set project mira-arc-hackathon
 
 | Time | Scene |
 |------|-------|
-| 0:00–1:30 | Sarah chats with ARIA → cart builds → order placed → stockout logged |
-| 1:30–2:00 | BigQuery bridge — one new incident row visible |
-| 2:00–3:30 | Ahmed's dashboard → PULSE surfaces pattern → root cause → PO approval |
-| 3:30–4:00 | The loop closes — *"tomorrow Sarah finds brown rice in stock"* |
-| 4:00–5:00 | Architecture diagram + Phase 2 roadmap |
+| 0:00–1:30 | Sarah chats with ARIA → cart builds → stockout flagged → substitution offered → order placed → session logged to BigQuery |
+| 1:30–2:00 | BigQuery bridge — new incident row visible |
+| 2:00–3:00 | Ahmed's dashboard → PULSE surfaces stockout pattern → root cause + evidence → PO draft → one-click approval |
+| 3:00–3:45 | PULSE perishable alert — Almarai Laban not selling fast enough → 25% discount proposed → Ahmed approves → discount_active=True |
+| 3:45–4:15 | ARIA surfaces the discount to next customer naturally → "Almarai Laban on 25% discount today — AED 6 instead of AED 8. Want to add it?" |
+| 4:15–5:00 | Architecture diagram — the full loop closes. Phase 2 roadmap. |
 
 ---
 

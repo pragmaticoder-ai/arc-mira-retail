@@ -10,12 +10,13 @@ from __future__ import annotations
 import re
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.errors import error
 from tools.shared.llm import get_llm
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.parse_intent")
 router = APIRouter()
@@ -104,5 +105,6 @@ class ParseIntentRequest(BaseModel):
 
 
 @router.post("/tools/parse-intent")
-async def parse_intent_endpoint(req: ParseIntentRequest) -> dict:
+@limiter.limit("60/minute")
+async def parse_intent_endpoint(request: Request, req: ParseIntentRequest) -> dict:
     return parse_intent(req.customer_message)

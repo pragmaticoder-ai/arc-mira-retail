@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from tools.shared.retry import with_retry
 from tools.shared.settings import settings
 
 _TOKEN = re.compile(r"[a-z0-9]+")
@@ -99,14 +100,18 @@ class Embeddings(ABC):
 class MockEmbeddings(Embeddings):
     def embed(self, text: str) -> list[float]:
         if settings.mock_server_url:
-            resp = httpx.post(
-                f"{settings.mock_server_url}/v1/embeddings",
-                json={"text": text, "model": settings.embedding_model},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return resp.json()["embedding"]
+            return self._embed_http(text)
         return _SPACE.vectorize(text)
+
+    @with_retry(attempts=3)
+    def _embed_http(self, text: str) -> list[float]:
+        resp = httpx.post(
+            f"{settings.mock_server_url}/v1/embeddings",
+            json={"text": text, "model": settings.embedding_model},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()["embedding"]
 
 
 class RealEmbeddings(Embeddings):

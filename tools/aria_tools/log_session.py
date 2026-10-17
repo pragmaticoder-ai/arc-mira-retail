@@ -10,12 +10,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.bigquery_client import get_bigquery
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.log_session")
 router = APIRouter()
@@ -104,7 +105,8 @@ class LogSessionRequest(BaseModel):
 
 
 @router.post("/tools/log-session")
-async def log_session_endpoint(req: LogSessionRequest) -> dict:
+@limiter.limit("60/minute")
+async def log_session_endpoint(request: Request, req: LogSessionRequest) -> dict:
     return log_session(
         req.session_id, req.customer_id, req.store_id, req.items_ordered,
         req.items_unavailable, req.substitutions, req.promotion_id,

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.apply_promotion")
 router = APIRouter()
@@ -152,7 +153,8 @@ class ApplyPromotionRequest(BaseModel):
 
 
 @router.post("/tools/apply-promotion")
-async def apply_promotion_endpoint(req: ApplyPromotionRequest) -> dict:
+@limiter.limit("60/minute")
+async def apply_promotion_endpoint(request: Request, req: ApplyPromotionRequest) -> dict:
     return apply_promotion(
         req.cart, req.cart_total_aed, req.dietary_preference, req.store_id, req.session_id
     )

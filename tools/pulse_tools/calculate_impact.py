@@ -7,11 +7,12 @@ cite its basis in plain language. Always called before drafting a PO.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.calculate_impact")
 router = APIRouter()
@@ -92,7 +93,8 @@ class CalculateImpactRequest(BaseModel):
 
 
 @router.post("/tools/calculate-impact")
-async def calculate_impact_endpoint(req: CalculateImpactRequest) -> dict:
+@limiter.limit("20/minute")
+async def calculate_impact_endpoint(request: Request, req: CalculateImpactRequest) -> dict:
     return calculate_impact(
         req.product_id, req.store_id, req.incident_count, req.average_cart_aed,
         req.abandonment_count, req.days_to_next_delivery,

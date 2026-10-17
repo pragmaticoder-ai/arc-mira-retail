@@ -6,12 +6,13 @@ can mention them (ARIA system prompt). Lists alternative stores with stock.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.check_stock")
 router = APIRouter()
@@ -91,5 +92,6 @@ class CheckStockRequest(BaseModel):
 
 
 @router.post("/tools/check-stock")
-async def check_stock_endpoint(req: CheckStockRequest) -> dict:
+@limiter.limit("60/minute")
+async def check_stock_endpoint(request: Request, req: CheckStockRequest) -> dict:
     return check_stock(req.product_id, req.store_id)

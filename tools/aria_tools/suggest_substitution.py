@@ -14,7 +14,7 @@ the tool behaves sensibly for arbitrary inputs:
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
@@ -22,6 +22,7 @@ from tools.shared.bigquery_client import get_bigquery
 from tools.shared.embeddings import product_document
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 from tools.shared.vector_search import get_vector_search
 
 logger = get_logger("aria.suggest_substitution")
@@ -119,7 +120,7 @@ def suggest_substitution(
     # Score = similarity, boosted when in the ±20% price band and/or in the
     # customer's purchase history. Similarity dominates; band/history break ties
     # and nudge otherwise-close candidates.
-    def score(c: dict) -> float:
+    def _rank_score(c: dict) -> float:
         s = c["similarity_score"]
         if band_floor <= c["price_aed"] <= band_ceiling:
             s += 0.10
@@ -127,13 +128,13 @@ def suggest_substitution(
             s += 0.15
         return s
 
-    relevant.sort(key=score, reverse=True)
+    relevant.sort(key=_rank_score, reverse=True)
     best = relevant[0]
 
     in_band = band_floor <= best["price_aed"] <= band_ceiling
     from_history = best["product_id"] in history
     sub = db.get_product_at_store(best["product_id"], store_id) or db.get_product(best["product_id"])
-    cat = sub["category"].replace("_", " ")
+    cat = (sub["category"] if sub else "grocery").replace("_", " ")
 
     if in_band:
         reason = f"Similar {cat}, matches {dietary_preference} preference, within your usual price range"
@@ -182,7 +183,8 @@ class SubstitutionRequest(BaseModel):
 
 
 @router.post("/tools/suggest-substitution")
-async def suggest_substitution_endpoint(req: SubstitutionRequest) -> dict:
+@limiter.limit("60/minute")
+async def suggest_substitution_endpoint(request: Request, req: SubstitutionRequest) -> dict:
     return suggest_substitution(
         req.product_id, req.store_id, req.dietary_preference, req.max_price_aed, req.customer_id
     )

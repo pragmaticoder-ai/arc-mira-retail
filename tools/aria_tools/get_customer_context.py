@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.get_customer_context")
 router = APIRouter()
@@ -83,5 +84,6 @@ class CustomerContextRequest(BaseModel):
 
 
 @router.post("/tools/get-customer-context")
-async def get_customer_context_endpoint(req: CustomerContextRequest) -> dict:
+@limiter.limit("60/minute")
+async def get_customer_context_endpoint(request: Request, req: CustomerContextRequest) -> dict:
     return get_customer_context(req.customer_id)

@@ -6,13 +6,14 @@ preference, and budget. Restricted to the 8 allowed grocery categories.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.llm import ALLOWED_CATEGORIES, get_llm
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.build_cart")
 router = APIRouter()
@@ -131,7 +132,8 @@ class BuildCartRequest(BaseModel):
 
 
 @router.post("/tools/build-cart")
-async def build_cart_endpoint(req: BuildCartRequest) -> dict:
+@limiter.limit("30/minute")
+async def build_cart_endpoint(request: Request, req: BuildCartRequest) -> dict:
     return build_cart(
         req.goal, req.dietary_preference, req.budget_aed, req.household_size, req.store_id
     )

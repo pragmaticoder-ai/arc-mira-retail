@@ -10,12 +10,13 @@ import hashlib
 import json
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.place_order")
 router = APIRouter()
@@ -136,5 +137,6 @@ class PlaceOrderRequest(BaseModel):
 
 
 @router.post("/tools/place-order")
-async def place_order_endpoint(req: PlaceOrderRequest) -> dict:
+@limiter.limit("10/minute")
+async def place_order_endpoint(request: Request, req: PlaceOrderRequest) -> dict:
     return place_order(req.customer_id, req.store_id, req.cart, req.promotion_id, req.total_aed)

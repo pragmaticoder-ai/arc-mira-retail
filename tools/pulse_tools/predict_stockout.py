@@ -6,13 +6,14 @@ predict the next stockout. Only surfaces predictions with confidence >= 0.70.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.bigquery_client import get_bigquery
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.predict_stockout")
 router = APIRouter()
@@ -76,5 +77,6 @@ class PredictStockoutRequest(BaseModel):
 
 
 @router.post("/tools/predict-stockout")
-async def predict_stockout_endpoint(req: PredictStockoutRequest) -> dict:
+@limiter.limit("10/minute")
+async def predict_stockout_endpoint(request: Request, req: PredictStockoutRequest) -> dict:
     return predict_stockout(req.product_id, req.store_id, req.forecast_days)

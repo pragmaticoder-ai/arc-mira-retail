@@ -6,12 +6,13 @@ approval is always required. Only called after calculate_impact().
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.draft_purchase_order")
 router = APIRouter()
@@ -102,7 +103,8 @@ class DraftPORequest(BaseModel):
 
 
 @router.post("/tools/draft-purchase-order")
-async def draft_purchase_order_endpoint(req: DraftPORequest) -> dict:
+@limiter.limit("5/minute")
+async def draft_purchase_order_endpoint(request: Request, req: DraftPORequest) -> dict:
     return draft_purchase_order(
         req.product_id, req.store_id, req.quantity, req.urgency, req.justification,
         req.revenue_at_risk_aed, req.revenue_recoverable_aed, req.evidence_summary,

@@ -7,11 +7,12 @@ Gemini reasoning). Always reports what changed and why.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.optimize_budget")
 router = APIRouter()
@@ -90,5 +91,6 @@ class OptimizeBudgetRequest(BaseModel):
 
 
 @router.post("/tools/optimize-budget")
-async def optimize_budget_endpoint(req: OptimizeBudgetRequest) -> dict:
+@limiter.limit("30/minute")
+async def optimize_budget_endpoint(request: Request, req: OptimizeBudgetRequest) -> dict:
     return optimize_budget(req.cart, req.target_budget_aed, req.dietary_preference)

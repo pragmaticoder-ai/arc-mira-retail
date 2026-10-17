@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.find_root_cause")
 router = APIRouter()
@@ -151,7 +152,8 @@ class RootCauseRequest(BaseModel):
 
 
 @router.post("/tools/find-root-cause")
-async def find_root_cause_endpoint(req: RootCauseRequest) -> dict:
+@limiter.limit("20/minute")
+async def find_root_cause_endpoint(request: Request, req: RootCauseRequest) -> dict:
     return find_root_cause(
         req.product_id, req.store_id, req.peak_hour, req.incident_count, req.period_hours
     )

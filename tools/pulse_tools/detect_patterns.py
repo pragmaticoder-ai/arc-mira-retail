@@ -7,12 +7,13 @@ point for all PULSE analysis. Attaches an evidence block to each pattern.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.bigquery_client import get_bigquery
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.detect_patterns")
 router = APIRouter()
@@ -65,5 +66,6 @@ class DetectPatternsRequest(BaseModel):
 
 
 @router.post("/tools/detect-patterns")
-async def detect_patterns_endpoint(req: DetectPatternsRequest) -> dict:
+@limiter.limit("10/minute")
+async def detect_patterns_endpoint(request: Request, req: DetectPatternsRequest) -> dict:
     return detect_patterns(req.store_id, req.hours, req.min_incidents)

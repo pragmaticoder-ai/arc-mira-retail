@@ -1,12 +1,6 @@
 # ARC — Agentic Retail Command
 > AI-powered closed-loop retail intelligence for MIRA Retail
 
-**Team:** Pragmatic Engineers  
-**Competition:** AI Builder Cup 2026 — Retail & Commerce Theme  
-**Submission deadline:** Sunday, October 18, 2026
-
----
-
 ## What is ARC?
 
 ARC is a two-agent AI system that closes the loop between customer experience and retail operations at MIRA Retail — a modern UAE grocery chain.

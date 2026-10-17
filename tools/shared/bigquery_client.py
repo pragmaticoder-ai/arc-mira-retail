@@ -33,6 +33,10 @@ class BigQueryClient(ABC):
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
         """BigQuery ML ARIMA_PLUS forecast (canned in mock mode)."""
 
+    @abstractmethod
+    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
+        """7-day sell-through velocity (units/day) from incidents."""
+
 
 class MockBigQueryClient(BigQueryClient):
     def __init__(self) -> None:
@@ -124,6 +128,17 @@ class MockBigQueryClient(BigQueryClient):
             },
         }
 
+    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
+        # Mock velocities keyed to the demo. Laban sells ~8.5/day (drives the
+        # perishable trigger). Unknown products default to a modest rate.
+        rates = {
+            "laban_almarai_1l": 8.5,
+            "milk_almarai_2l": 12.0,
+            "bread_white_loaf": 15.0,
+            "croissant_4pk": 5.0,
+        }
+        return rates.get(product_id, 3.0)
+
 
 class RealBigQueryClient(BigQueryClient):
     """TODO(backend): implement with google.cloud.bigquery. Note ARIMA_PLUS has
@@ -138,6 +153,7 @@ class RealBigQueryClient(BigQueryClient):
     def insert_incident(self, incident: dict) -> dict: ...
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]: ...
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict: ...
+    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float: ...
 
 
 _client: BigQueryClient | None = None

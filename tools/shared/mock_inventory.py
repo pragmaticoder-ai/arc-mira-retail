@@ -47,3 +47,14 @@ MOCK_PROMOTIONS = [
     {"promotion_id": "promo_rice_10", "name": "Rice 10% off", "category": "grains", "dietary_filter": None, "discount_pct": 10.0, "min_cart_aed": 50.0, "is_active": True},
     {"promotion_id": "promo_halal_bundle", "name": "Halal chicken bundle", "category": "halal_meat", "dietary_filter": "halal", "discount_pct": 12.0, "min_cart_aed": 80.0, "is_active": True},
 ]
+
+
+# Replenishment schedules (mirror data/seed/04_replenishment.sql).
+# The brown-rice Tuesday-14:00 gap vs Mon–Wed peak is the demo root cause.
+MOCK_REPLENISHMENT = [
+    {"store_id": STORE_ID, "product_id": "rice_brown_500g", "supplier_id": "sup_004", "delivery_day": "Tuesday", "delivery_time": "14:00", "quantity_per_delivery": 40, "lead_time_days": 2},
+    {"store_id": STORE_ID, "product_id": "rice_basmati_5kg", "supplier_id": "sup_004", "delivery_day": "Monday", "delivery_time": "09:00", "quantity_per_delivery": 30, "lead_time_days": 2},
+    {"store_id": STORE_ID, "product_id": "milk_almarai_2l", "supplier_id": "sup_001", "delivery_day": "Daily", "delivery_time": "06:00", "quantity_per_delivery": 60, "lead_time_days": 1},
+    {"store_id": STORE_ID, "product_id": "laban_almarai_1l", "supplier_id": "sup_001", "delivery_day": "Daily", "delivery_time": "06:00", "quantity_per_delivery": 50, "lead_time_days": 1},
+    {"store_id": STORE_ID, "product_id": "chicken_whole_1kg", "supplier_id": "sup_006", "delivery_day": "Wednesday", "delivery_time": "08:00", "quantity_per_delivery": 40, "lead_time_days": 2},
+]

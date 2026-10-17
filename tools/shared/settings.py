@@ -1,62 +1,56 @@
-"""Env-backed settings for ARC backend tools.
+"""Pydantic settings management for ARC backend.
 
-All configuration comes from environment variables so the same code runs
-locally (mock mode) and in Cloud Run (real GCP, values from Secret Manager).
-Nothing is hardcoded. Flip USE_MOCK=false and supply real GCP settings to
-switch every adapter from mock to live — no code changes.
+All configuration comes from environment variables, with sensible defaults
+for local development. In production, secrets come from Secret Manager.
 """
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _bool(key: str, default: bool) -> bool:
-    v = os.getenv(key)
-    if v is None:
-        return default
-    return v.strip().lower() in {"1", "true", "yes", "on"}
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
+    # Google Cloud
+    google_cloud_project: str = "mira-arc-hackathon"
+    google_cloud_region: str = "asia-southeast1"
 
-@dataclass(frozen=True)
-class Settings:
-    # ── Mode ─────────────────────────────────────────────────────────
-    # True  -> adapters use in-process mocks / the local mock server
-    # False -> adapters call real AlloyDB / BigQuery / Vertex AI
-    use_mock: bool = _bool("USE_MOCK", True)
+    # AlloyDB
+    alloydb_host: str = "127.0.0.1"
+    alloydb_port: int = 5432
+    alloydb_database: str = "postgres"
+    alloydb_user: str = "postgres"
+    alloydb_password: str = ""
 
-    # Optional HTTP mock server. When set, mock adapters route through it
-    # (simulating real API calls over the wire). When unset, mocks run
-    # in-process. Ignored entirely when use_mock is False.
-    mock_server_url: str | None = os.getenv("MOCK_SERVER_URL") or None
+    # BigQuery
+    bigquery_dataset: str = "arc_dataset"
+    bigquery_location: str = "asia-southeast1"
 
-    # ── Google Cloud (used only when use_mock is False) ──────────────
-    google_cloud_project: str = os.getenv("GOOGLE_CLOUD_PROJECT", "mira-arc-hackathon")
-    google_cloud_region: str = os.getenv("GOOGLE_CLOUD_REGION", "asia-southeast1")
+    # Vertex AI
+    vertex_ai_location: str = "asia-southeast1"
+    gemini_pro_model: str = "gemini-1.5-pro"
+    gemini_flash_model: str = "gemini-1.5-flash-001"
 
-    # ── AlloyDB ──────────────────────────────────────────────────────
-    alloydb_host: str = os.getenv("ALLOYDB_HOST", "127.0.0.1")
-    alloydb_port: int = int(os.getenv("ALLOYDB_PORT", "5432"))
-    alloydb_database: str = os.getenv("ALLOYDB_DATABASE", "postgres")
-    alloydb_user: str = os.getenv("ALLOYDB_USER", "postgres")
-    # Real password is sourced from Secret Manager in production, never code.
-    alloydb_password: str = os.getenv("ALLOYDB_PASSWORD", "")
+    # Rate limiting
+    rate_limit_per_minute: int = 60
+    rate_limit_burst: int = 10
 
-    # ── BigQuery ─────────────────────────────────────────────────────
-    bigquery_dataset: str = os.getenv("BIGQUERY_DATASET", "arc_dataset")
-    bigquery_location: str = os.getenv("BIGQUERY_LOCATION", "asia-southeast1")
+    # Environment
+    environment: str = "development"
+    log_level: str = "INFO"
 
-    # ── Vertex AI / Gemini ───────────────────────────────────────────
-    vertex_ai_location: str = os.getenv("VERTEX_AI_LOCATION", "asia-southeast1")
-    gemini_pro_model: str = os.getenv("GEMINI_PRO_MODEL", "gemini-1.5-pro")
-    gemini_flash_model: str = os.getenv("GEMINI_FLASH_MODEL", "gemini-1.5-flash-001")
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", "textembedding-gecko@003")
-    embedding_dim: int = int(os.getenv("EMBEDDING_DIM", "768"))
+    # Mock mode (for local development without GCP)
+    use_mock: bool = True
+    mock_server_url: str = "http://localhost:8900"
 
-    # ── Environment ──────────────────────────────────────────────────
-    environment: str = os.getenv("ENVIRONMENT", "development")
-    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    # Tool service URLs (set after Cloud Run deploy)
+    aria_tools_url: str = ""
+    pulse_tools_url: str = ""
 
 
 settings = Settings()

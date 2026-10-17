@@ -1,0 +1,1346 @@
+openapi: 3.1.0
+
+info:
+  title: ARC — ARIA Tool Functions API
+  version: 1.0.0
+  description: |
+    ARIA CX Agent tool functions for MIRA Retail.
+    All endpoints are called by the Google ADK ARIA agent via Cloud Run.
+    Every endpoint requires IAM Bearer token authentication.
+    Rate limits apply per remote IP address.
+
+    ## Authentication
+    All endpoints require a valid Google Cloud IAM Bearer token.
+    In development (ENVIRONMENT=development), auth is bypassed.
+
+    ## Error handling
+    All endpoints return a structured error response on failure.
+    The agent retries once if retry_suggested=true.
+
+    ## Rate limits
+    - Default: 60 requests/minute per IP
+    - place_order: 10 requests/minute
+    - build_cart: 30 requests/minute
+    - log_session: 60 requests/minute
+
+  contact:
+    name: Pragmatic Engineers
+    url: https://github.com/pragmaticoder-ai/arc-mira-retail
+
+servers:
+  - url: https://arc-aria-tools-xxxx-as.a.run.app
+    description: Production (Cloud Run)
+  - url: http://localhost:8001
+    description: Local development
+
+tags:
+  - name: intent
+    description: Customer intent parsing
+  - name: customer
+    description: Customer profile and context
+  - name: cart
+    description: Cart building, stock checking, substitution, optimization
+  - name: promotions
+    description: Promotion discovery and application
+  - name: orders
+    description: Order placement
+  - name: session
+    description: Session logging to BigQuery bridge
+  - name: health
+    description: Service health
+
+security:
+  - BearerAuth: []
+
+# ══════════════════════════════════════════════════════════════
+# PATHS
+# ══════════════════════════════════════════════════════════════
+
+paths:
+
+  # ── HEALTH ──────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [health]
+      operationId: health_check
+      summary: Health check
+      description: Returns service health status. No auth required.
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # ── INTENT ──────────────────────────────────────────────────
+
+  /tools/parse-intent:
+    post:
+      tags: [intent]
+      operationId: parse_intent
+      summary: Parse customer intent from natural language
+      description: |
+        Extracts structured intent from a customer's natural language message.
+        Called first when a customer sends their initial shopping request.
+        Do NOT call for follow-up messages in an ongoing session.
+
+        **Validations:**
+        - customer_message must be non-empty string
+        - customer_message max length: 1000 characters
+        - customer_message must be sanitized (no SQL/script injection)
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseIntentRequest"
+            examples:
+              weekly_groceries:
+                summary: Weekly grocery request
+                value:
+                  customer_message: "I need groceries for the week, family of 4, halal, under AED 300"
+              urgent_item:
+                summary: Single urgent item
+                value:
+                  customer_message: "I need milk urgently, just 1 litre"
+      responses:
+        "200":
+          description: Intent parsed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseIntentResponse"
+              examples:
+                success:
+                  value:
+                    goal: "weekly groceries"
+                    dietary_preference: "halal"
+                    budget_aed: 300.0
+                    household_size: 4
+                    urgency: "normal"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  # ── CUSTOMER ─────────────────────────────────────────────────
+
+  /tools/get-customer-context:
+    post:
+      tags: [customer]
+      operationId: get_customer_context
+      summary: Retrieve customer profile and last 3 orders
+      description: |
+        Retrieves the customer's profile and last 3 orders from AlloyDB.
+        Always call this before building any cart.
+
+        **Validations:**
+        - customer_id must be non-empty UUID string
+        - customer_id must exist in customer_profiles table
+        - Returns 404 if customer not found
+
+        **Sanity checks:**
+        - dietary_preference must be one of: halal, vegetarian, vegan, none
+        - weekly_budget_aed must be > 0
+        - household_size must be between 1 and 20
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetCustomerContextRequest"
+            examples:
+              valid_customer:
+                value:
+                  customer_id: "sarah_123"
+      responses:
+        "200":
+          description: Customer context retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContextResponse"
+              examples:
+                success:
+                  value:
+                    customer_id: "sarah_123"
+                    name: "Sarah Al Mansoori"
+                    dietary_preference: "halal"
+                    household_size: 4
+                    weekly_budget_aed: 300.0
+                    preferred_store: "dubai_marina_01"
+                    last_orders:
+                      - product_id: "rice_basmati_2kg"
+                        product_name: "Basmati Rice 2kg"
+                        last_ordered: "2026-10-10"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  # ── CART ─────────────────────────────────────────────────────
+
+  /tools/build-cart:
+    post:
+      tags: [cart]
+      operationId: build_cart
+      summary: Build grocery cart from customer goal
+      description: |
+        Builds a grocery cart from AlloyDB inventory matching the customer goal.
+        Restricted to grocery categories only: dairy, grains, halal meat,
+        vegetables, fruits, beverages, snacks, condiments.
+
+        **Validations:**
+        - goal must be non-empty string, max 500 chars
+        - dietary_preference must be one of: halal, vegetarian, vegan, none
+        - budget_aed must be > 0 and <= 10000
+        - household_size must be between 1 and 20
+        - store_id must exist in stores table
+
+        **Sanity checks:**
+        - Returns at least 1 item or items_unavailable must explain why
+        - total_aed must equal sum of (item.price_aed * item.quantity)
+        - All returned items must have valid product_ids
+        - No non-grocery categories returned (electronics, clothing, etc.)
+
+        **Rate limit:** 30/minute
+      x-rate-limit: "30/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildCartRequest"
+            examples:
+              weekly_halal:
+                summary: Weekly halal family shop
+                value:
+                  goal: "weekly groceries"
+                  dietary_preference: "halal"
+                  budget_aed: 300.0
+                  household_size: 4
+                  store_id: "dubai_marina_01"
+      responses:
+        "200":
+          description: Cart built successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildCartResponse"
+              examples:
+                success:
+                  value:
+                    items:
+                      - product_id: "milk_almarai_2l"
+                        product_name: "Almarai Full Fat Milk 2L"
+                        quantity: 2
+                        price_aed: 12.00
+                        aisle_ref: "A2"
+                        in_stock: true
+                    total_aed: 287.50
+                    items_unavailable:
+                      - product_id: "rice_brown_500g"
+                        product_name: "Brown Rice 500g"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  /tools/check-stock:
+    post:
+      tags: [cart]
+      operationId: check_stock
+      summary: Check real-time stock for a product at a store
+      description: |
+        Checks real-time stock for a specific product at a specific store.
+        Call for every item before confirming it in the cart.
+
+        **Validations:**
+        - product_id must be non-empty string
+        - product_id must exist in inventory table
+        - store_id must exist in stores table
+
+        **Sanity checks:**
+        - quantity must be >= 0
+        - If available=false, alternative_stores must be populated if stock exists elsewhere
+        - aisle_ref must be non-empty if available=true
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckStockRequest"
+            examples:
+              check_rice:
+                value:
+                  product_id: "rice_brown_500g"
+                  store_id: "dubai_marina_01"
+      responses:
+        "200":
+          description: Stock checked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckStockResponse"
+              examples:
+                in_stock:
+                  value:
+                    product_id: "rice_brown_500g"
+                    available: false
+                    quantity: 0
+                    aisle_ref: null
+                    alternative_stores:
+                      - store_id: "jbr_01"
+                        store_name: "MIRA JBR"
+                        quantity: 45
+                        distance_km: 1.2
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  /tools/suggest-substitution:
+    post:
+      tags: [cart]
+      operationId: suggest_substitution
+      summary: Find semantically similar in-stock product
+      description: |
+        Uses AlloyDB AI vector search (ScaNN) to find a semantically similar
+        in-stock product matching dietary_preference and within max_price_aed.
+        Call immediately when check_stock returns available=false.
+
+        **Validations:**
+        - product_id must exist in inventory table
+        - store_id must exist in stores table
+        - dietary_preference must be one of: halal, vegetarian, vegan, none
+        - max_price_aed must be > 0
+
+        **Sanity checks:**
+        - Returned substitute must have in_stock=true
+        - Returned substitute must respect dietary_preference
+        - similarity_score must be between 0.0 and 1.0
+        - substitute must not be the same product_id as the input
+        - price_aed must be <= max_price_aed
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuggestSubstitutionRequest"
+            examples:
+              brown_rice_sub:
+                value:
+                  product_id: "rice_brown_500g"
+                  store_id: "dubai_marina_01"
+                  dietary_preference: "halal"
+                  max_price_aed: 22.00
+      responses:
+        "200":
+          description: Substitution found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestSubstitutionResponse"
+              examples:
+                found:
+                  value:
+                    substitute_product_id: "rice_basmati_2kg"
+                    name: "Basmati Rice 2kg"
+                    price_aed: 18.00
+                    similarity_score: 0.87
+                    reason: "Similar grain product, same dietary category, comparable price"
+                    in_stock: true
+                not_found:
+                  value:
+                    substitute_product_id: null
+                    name: null
+                    price_aed: null
+                    similarity_score: 0.0
+                    reason: "No suitable substitution found within price range"
+                    in_stock: false
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  /tools/optimize-budget:
+    post:
+      tags: [cart]
+      operationId: optimize_budget
+      summary: Trim cart to meet target budget
+      description: |
+        Trims or swaps cart items to bring total within target_budget_aed.
+        Uses Gemini reasoning to select the least impactful items to adjust.
+
+        **Validations:**
+        - cart must contain at least 1 item
+        - target_budget_aed must be > 0
+        - dietary_preference must be one of: halal, vegetarian, vegan, none
+        - Each cart item must have valid product_id, quantity > 0, price_aed > 0
+
+        **Sanity checks:**
+        - new_total_aed must be <= target_budget_aed
+        - new_total_aed must be >= target_budget_aed * 0.85 (no more than 15% under)
+        - updated_cart must not be empty
+        - All dietary restrictions must still be respected after optimization
+        - changes_made must explain every item removed or swapped
+
+        **Rate limit:** 30/minute
+      x-rate-limit: "30/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OptimizeBudgetRequest"
+      responses:
+        "200":
+          description: Budget optimized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizeBudgetResponse"
+              examples:
+                optimized:
+                  value:
+                    updated_cart:
+                      - product_id: "milk_almarai_2l"
+                        product_name: "Almarai Full Fat Milk 2L"
+                        quantity: 1
+                        price_aed: 12.00
+                        aisle_ref: "A2"
+                        in_stock: true
+                    new_total_aed: 287.00
+                    changes_made:
+                      - action: "reduced_quantity"
+                        product_name: "Almarai Full Fat Milk 2L"
+                        saving_aed: 12.00
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  # ── PROMOTIONS ───────────────────────────────────────────────
+
+  /tools/apply-promotion:
+    post:
+      tags: [promotions]
+      operationId: apply_promotion
+      summary: Apply best available promotion to cart
+      description: |
+        Checks AlloyDB promotions table for applicable active promotions.
+        Applies the highest-value relevant promotion matching dietary_preference.
+
+        **Validations:**
+        - cart must contain at least 1 item
+        - cart_total_aed must be > 0
+        - dietary_preference must be one of: halal, vegetarian, vegan, none
+        - store_id must exist in stores table
+
+        **Sanity checks:**
+        - If promotion_applied=true, discount_aed must be > 0
+        - new_total_aed must equal cart_total_aed - discount_aed
+        - new_total_aed must be > 0 (promotion cannot make cart free)
+        - Promotion must be currently valid (valid_from <= now <= valid_until)
+        - Promotion must respect is_active=true
+        - discount_active items must be surfaced to customer naturally
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyPromotionRequest"
+      responses:
+        "200":
+          description: Promotion check completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyPromotionResponse"
+              examples:
+                applied:
+                  value:
+                    promotion_applied: true
+                    promotion_id: "promo_halal_bundle_oct"
+                    promotion_name: "Halal Family Bundle"
+                    discount_aed: 15.00
+                    new_total_aed: 272.00
+                    reason: "Cart qualifies for Halal Family Bundle (min AED 250)"
+                not_applied:
+                  value:
+                    promotion_applied: false
+                    promotion_id: null
+                    promotion_name: null
+                    discount_aed: 0.0
+                    new_total_aed: 287.00
+                    reason: "No applicable promotions for this cart"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  # ── ORDERS ───────────────────────────────────────────────────
+
+  /tools/place-order:
+    post:
+      tags: [orders]
+      operationId: place_order
+      summary: Place confirmed order
+      description: |
+        Writes the confirmed order to AlloyDB orders table.
+        Only call after receiving explicit customer confirmation.
+
+        **Explicit confirmation phrases required:**
+        confirm | yes | place order | go ahead | proceed
+
+        **Validations:**
+        - customer_id must exist in customer_profiles
+        - store_id must exist in stores
+        - cart must contain at least 1 item
+        - total_aed must be > 0 and match sum of cart items
+        - promotion_id if provided must exist in promotions table
+        - All cart items must still be in stock (re-verified at placement)
+
+        **Sanity checks:**
+        - Idempotency: duplicate order within 60 seconds for same customer returns existing order_id
+        - total_aed must equal sum of (item.price_aed * item.quantity) - promotion discount
+        - order status must be "confirmed" on creation
+        - delivery_window must be in the future
+
+        **Side effects:**
+        - Decrements inventory.stock_quantity for each item
+        - Creates order record in AlloyDB
+
+        **Rate limit:** 10/minute (write operation)
+      x-rate-limit: "10/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceOrderRequest"
+            examples:
+              confirmed_order:
+                value:
+                  customer_id: "sarah_123"
+                  store_id: "dubai_marina_01"
+                  cart:
+                    - product_id: "milk_almarai_2l"
+                      product_name: "Almarai Full Fat Milk 2L"
+                      quantity: 2
+                      price_aed: 12.00
+                  promotion_id: "promo_halal_bundle_oct"
+                  total_aed: 272.00
+      responses:
+        "201":
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceOrderResponse"
+              examples:
+                success:
+                  value:
+                    order_id: "MR-2026-4821"
+                    status: "confirmed"
+                    total_aed: 272.00
+                    estimated_delivery_window: "Sat 18 Oct · 10:00–12:00"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Duplicate order detected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolError"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+  # ── SESSION ──────────────────────────────────────────────────
+
+  /tools/log-session:
+    post:
+      tags: [session]
+      operationId: log_session
+      summary: Log session to BigQuery bridge
+      description: |
+        Writes the complete session summary to BigQuery incidents table.
+        This is the bridge between ARIA and PULSE.
+        ALWAYS call this as the absolute last step of every session.
+        Never skip — even if no order was placed.
+
+        **Validations:**
+        - session_id must be valid UUID
+        - customer_id must be non-empty string
+        - store_id must be non-empty string
+        - sentiment must be one of: positive, neutral, negative
+        - order_placed must be boolean
+        - If order_placed=false, abandonment_reason should be provided
+        - cart_total_aed must be >= 0
+        - promotion_saving_aed must be >= 0
+
+        **Sanity checks:**
+        - Idempotency: duplicate session_id is a no-op (returns existing log)
+        - BigQuery write must complete within 5 seconds
+        - Retry up to 3 times with exponential backoff on failure
+        - Write failure must NOT prevent customer from seeing order confirmation
+        - items_unavailable and substitutions arrays can be empty but not null
+
+        **Rate limit:** 60/minute
+      x-rate-limit: "60/minute"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogSessionRequest"
+            examples:
+              completed_order:
+                value:
+                  session_id: "550e8400-e29b-41d4-a716-446655440000"
+                  customer_id: "sarah_123"
+                  store_id: "dubai_marina_01"
+                  items_ordered:
+                    - product_id: "milk_almarai_2l"
+                      product_name: "Almarai Full Fat Milk 2L"
+                      quantity: 2
+                      price_aed: 12.00
+                  items_unavailable:
+                    - product_id: "rice_brown_500g"
+                      product_name: "Brown Rice 500g"
+                  substitutions:
+                    - original_product_id: "rice_brown_500g"
+                      substitute_product_id: "rice_basmati_2kg"
+                      accepted: true
+                  promotion_id: "promo_halal_bundle_oct"
+                  promotion_saving_aed: 15.00
+                  cart_total_aed: 272.00
+                  budget_aed: 300.00
+                  sentiment: "positive"
+                  order_placed: true
+                  abandonment_reason: null
+      responses:
+        "200":
+          description: Session logged successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogSessionResponse"
+              examples:
+                logged:
+                  value:
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    logged: true
+                    timestamp: "2026-10-17T10:32:00Z"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
+        "500":
+          $ref: "#/components/responses/ToolError"
+
+# ══════════════════════════════════════════════════════════════
+# COMPONENTS
+# ══════════════════════════════════════════════════════════════
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: GoogleIAM
+      description: Google Cloud IAM Bearer token
+
+  # ── REQUEST SCHEMAS ──────────────────────────────────────────
+
+  schemas:
+
+    ParseIntentRequest:
+      type: object
+      required: [customer_message]
+      properties:
+        customer_message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Raw natural language message from customer
+          example: "I need groceries for the week, family of 4, halal, under AED 300"
+
+    GetCustomerContextRequest:
+      type: object
+      required: [customer_id]
+      properties:
+        customer_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Customer unique identifier
+          example: "sarah_123"
+
+    BuildCartRequest:
+      type: object
+      required: [goal, dietary_preference, budget_aed, household_size, store_id]
+      properties:
+        goal:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: "weekly groceries"
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+        budget_aed:
+          type: number
+          format: float
+          minimum: 0.01
+          maximum: 10000.00
+          example: 300.00
+        household_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+          example: 4
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+
+    CheckStockRequest:
+      type: object
+      required: [product_id, store_id]
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+          example: "rice_brown_500g"
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+
+    SuggestSubstitutionRequest:
+      type: object
+      required: [product_id, store_id, dietary_preference, max_price_aed]
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+          example: "rice_brown_500g"
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+        max_price_aed:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 22.00
+
+    OptimizeBudgetRequest:
+      type: object
+      required: [cart, target_budget_aed, dietary_preference]
+      properties:
+        cart:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CartItem"
+        target_budget_aed:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 300.00
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+
+    ApplyPromotionRequest:
+      type: object
+      required: [cart, cart_total_aed, dietary_preference, store_id]
+      properties:
+        cart:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CartItem"
+        cart_total_aed:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 287.00
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+
+    PlaceOrderRequest:
+      type: object
+      required: [customer_id, store_id, cart, total_aed]
+      properties:
+        customer_id:
+          type: string
+          minLength: 1
+          example: "sarah_123"
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+        cart:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CartItem"
+        promotion_id:
+          type: string
+          nullable: true
+          example: "promo_halal_bundle_oct"
+        total_aed:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 272.00
+
+    LogSessionRequest:
+      type: object
+      required: [session_id, customer_id, store_id, items_ordered, items_unavailable, substitutions, promotion_saving_aed, cart_total_aed, budget_aed, sentiment, order_placed]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        customer_id:
+          type: string
+          minLength: 1
+          example: "sarah_123"
+        store_id:
+          type: string
+          minLength: 1
+          example: "dubai_marina_01"
+        items_ordered:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderedItem"
+        items_unavailable:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnavailableItem"
+        substitutions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Substitution"
+        promotion_id:
+          type: string
+          nullable: true
+          example: "promo_halal_bundle_oct"
+        promotion_saving_aed:
+          type: number
+          format: float
+          minimum: 0.0
+          example: 15.00
+        cart_total_aed:
+          type: number
+          format: float
+          minimum: 0.0
+          example: 272.00
+        budget_aed:
+          type: number
+          format: float
+          minimum: 0.0
+          example: 300.00
+        sentiment:
+          $ref: "#/components/schemas/Sentiment"
+        order_placed:
+          type: boolean
+          example: true
+        abandonment_reason:
+          type: string
+          nullable: true
+          example: null
+
+  # ── RESPONSE SCHEMAS ─────────────────────────────────────────
+
+    ParseIntentResponse:
+      type: object
+      required: [goal, dietary_preference, budget_aed, household_size, urgency]
+      properties:
+        goal:
+          type: string
+          example: "weekly groceries"
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+        budget_aed:
+          type: number
+          format: float
+          nullable: true
+          example: 300.00
+        household_size:
+          type: integer
+          nullable: true
+          example: 4
+        urgency:
+          $ref: "#/components/schemas/Urgency"
+
+    CustomerContextResponse:
+      type: object
+      required: [customer_id, name, dietary_preference, household_size, weekly_budget_aed, preferred_store, last_orders]
+      properties:
+        customer_id:
+          type: string
+        name:
+          type: string
+          example: "Sarah Al Mansoori"
+        dietary_preference:
+          $ref: "#/components/schemas/DietaryPreference"
+        household_size:
+          type: integer
+          example: 4
+        weekly_budget_aed:
+          type: number
+          format: float
+          example: 300.00
+        preferred_store:
+          type: string
+          example: "dubai_marina_01"
+        last_orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/LastOrderItem"
+
+    BuildCartResponse:
+      type: object
+      required: [items, total_aed, items_unavailable]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItemResponse"
+        total_aed:
+          type: number
+          format: float
+          example: 287.50
+        items_unavailable:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnavailableItem"
+
+    CheckStockResponse:
+      type: object
+      required: [product_id, available, quantity, alternative_stores]
+      properties:
+        product_id:
+          type: string
+        available:
+          type: boolean
+        quantity:
+          type: integer
+          minimum: 0
+        aisle_ref:
+          type: string
+          nullable: true
+          example: "B3"
+        alternative_stores:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlternativeStore"
+
+    SuggestSubstitutionResponse:
+      type: object
+      required: [substitute_product_id, name, price_aed, similarity_score, reason, in_stock]
+      properties:
+        substitute_product_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        price_aed:
+          type: number
+          format: float
+          nullable: true
+        similarity_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        reason:
+          type: string
+        in_stock:
+          type: boolean
+
+    OptimizeBudgetResponse:
+      type: object
+      required: [updated_cart, new_total_aed, changes_made]
+      properties:
+        updated_cart:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CartItemResponse"
+        new_total_aed:
+          type: number
+          format: float
+        changes_made:
+          type: array
+          items:
+            $ref: "#/components/schemas/BudgetChange"
+
+    ApplyPromotionResponse:
+      type: object
+      required: [promotion_applied, discount_aed, new_total_aed, reason]
+      properties:
+        promotion_applied:
+          type: boolean
+        promotion_id:
+          type: string
+          nullable: true
+        promotion_name:
+          type: string
+          nullable: true
+        discount_aed:
+          type: number
+          format: float
+          minimum: 0.0
+        new_total_aed:
+          type: number
+          format: float
+        reason:
+          type: string
+
+    PlaceOrderResponse:
+      type: object
+      required: [order_id, status, total_aed, estimated_delivery_window]
+      properties:
+        order_id:
+          type: string
+          example: "MR-2026-4821"
+        status:
+          type: string
+          enum: [confirmed]
+        total_aed:
+          type: number
+          format: float
+        estimated_delivery_window:
+          type: string
+          example: "Sat 18 Oct · 10:00–12:00"
+
+    LogSessionResponse:
+      type: object
+      required: [session_id, logged, timestamp]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        logged:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        service:
+          type: string
+          example: "arc-aria-tools"
+
+    ToolError:
+      type: object
+      required: [error, error_code, error_message, retry_suggested]
+      properties:
+        error:
+          type: boolean
+          example: true
+        error_code:
+          type: string
+          example: "DB_CONNECTION_ERROR"
+          enum:
+            - DB_CONNECTION_ERROR
+            - NOT_FOUND
+            - VALIDATION_ERROR
+            - RATE_LIMIT_EXCEEDED
+            - AUTH_ERROR
+            - TIMEOUT
+            - INTERNAL_ERROR
+            - DUPLICATE_ORDER
+            - BIGQUERY_WRITE_ERROR
+        error_message:
+          type: string
+          example: "Could not connect to AlloyDB after 3 retries"
+        retry_suggested:
+          type: boolean
+          example: true
+
+  # ── SHARED SCHEMAS ───────────────────────────────────────────
+
+    DietaryPreference:
+      type: string
+      enum: [halal, vegetarian, vegan, none]
+      example: "halal"
+
+    Urgency:
+      type: string
+      enum: [normal, urgent]
+      example: "normal"
+
+    Sentiment:
+      type: string
+      enum: [positive, neutral, negative]
+      example: "positive"
+
+    CartItem:
+      type: object
+      required: [product_id, product_name, quantity, price_aed]
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        price_aed:
+          type: number
+          format: float
+          minimum: 0.01
+
+    CartItemResponse:
+      type: object
+      required: [product_id, product_name, quantity, price_aed, aisle_ref, in_stock]
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        price_aed:
+          type: number
+          format: float
+        aisle_ref:
+          type: string
+          nullable: true
+        in_stock:
+          type: boolean
+
+    OrderedItem:
+      type: object
+      required: [product_id, product_name, quantity, price_aed]
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        price_aed:
+          type: number
+          format: float
+
+    UnavailableItem:
+      type: object
+      required: [product_id, product_name]
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+
+    Substitution:
+      type: object
+      required: [original_product_id, substitute_product_id, accepted]
+      properties:
+        original_product_id:
+          type: string
+        substitute_product_id:
+          type: string
+        accepted:
+          type: boolean
+
+    AlternativeStore:
+      type: object
+      required: [store_id, store_name, quantity, distance_km]
+      properties:
+        store_id:
+          type: string
+        store_name:
+          type: string
+        quantity:
+          type: integer
+        distance_km:
+          type: number
+          format: float
+
+    LastOrderItem:
+      type: object
+      required: [product_id, product_name, last_ordered]
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+        last_ordered:
+          type: string
+          format: date
+
+    BudgetChange:
+      type: object
+      required: [action, product_name, saving_aed]
+      properties:
+        action:
+          type: string
+          enum: [removed, reduced_quantity, swapped_brand]
+        product_name:
+          type: string
+        saving_aed:
+          type: number
+          format: float
+
+  # ── RESPONSES ────────────────────────────────────────────────
+
+  responses:
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "VALIDATION_ERROR"
+            error_message: "customer_message must be between 1 and 1000 characters"
+            retry_suggested: false
+
+    Unauthorized:
+      description: Missing or invalid IAM token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "AUTH_ERROR"
+            error_message: "Missing or invalid Authorization header"
+            retry_suggested: false
+
+    NotFound:
+      description: Requested resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "NOT_FOUND"
+            error_message: "Customer sarah_123 not found"
+            retry_suggested: false
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "RATE_LIMIT_EXCEEDED"
+            error_message: "Rate limit exceeded: 60 per minute"
+            retry_suggested: true
+
+    UnprocessableEntity:
+      description: Business logic validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "VALIDATION_ERROR"
+            error_message: "Cannot optimize cart below AED 0"
+            retry_suggested: false
+
+    ToolError:
+      description: Internal tool error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolError"
+          example:
+            error: true
+            error_code: "DB_CONNECTION_ERROR"
+            error_message: "Could not connect to AlloyDB after 3 retries"
+            retry_suggested: true

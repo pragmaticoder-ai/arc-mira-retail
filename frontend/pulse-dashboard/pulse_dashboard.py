@@ -20,17 +20,13 @@ import time
 
 import streamlit as st
 
-from mock_data import (
-    perishable_alerts,
-    stockout_patterns,
-    summary_metrics,
-)
+# data_provider serves LIVE data from the real PULSE tools (reading the shared
+# ARIA→PULSE bridge) when the backend is importable, else static mock_data.
+import data_provider as data
 
 # ── Config (env-backed; Secret Manager in production) ────────────────────
-PULSE_AGENT_URL = os.getenv("PULSE_AGENT_URL")  # unset -> mock mode
 STORE_NAME = os.getenv("PULSE_STORE_NAME", "MIRA Dubai Marina")
 REFRESH_SECONDS = int(os.getenv("PULSE_REFRESH_SECONDS", "10"))
-USE_MOCK = PULSE_AGENT_URL is None
 
 # ── Brand tokens (from BRAND.md / lib/brand.ts) ──────────────────────────
 MIRA_600 = "#0a5c44"
@@ -78,7 +74,7 @@ if "discount_status" not in st.session_state:
 
 
 def nav_bar() -> None:
-    mode = "MOCK DATA" if USE_MOCK else "LIVE"
+    mode = data.source_label()
     st.markdown(
         f"""
         <div class="pulse-nav">
@@ -102,14 +98,14 @@ def sidebar() -> None:
             st.rerun()
         st.caption(f"Auto-refresh every {REFRESH_SECONDS}s")
         st.divider()
-        m = summary_metrics()
-        st.metric("Stockout alerts", len(stockout_patterns()))
-        st.metric("Perishable alerts", len(perishable_alerts()))
+        m = data.summary_metrics()
+        st.metric("Stockout alerts", len(data.stockout_patterns()))
+        st.metric("Perishable alerts", len(data.perishable_alerts()))
         st.metric("POs pending", m["pos_pending"])
 
 
 def metric_row() -> None:
-    m = summary_metrics()
+    m = data.summary_metrics()
     c1, c2, c3 = st.columns(3)
     c1.metric("Incidents (48h)", m["incidents_48h"], delta=m["incidents_delta"])
     c2.metric(
@@ -123,7 +119,12 @@ def metric_row() -> None:
 
 def stockout_section() -> None:
     st.subheader("Stockout patterns")
-    for p in stockout_patterns():
+    patterns = data.stockout_patterns()
+    if not patterns:
+        st.info("No stockout patterns in the current window. "
+                "When ARIA logs an unavailable-item session, it appears here.")
+        return
+    for p in patterns:
         po = p["po"]
         status = st.session_state.po_status.get(po["po_id"], po["status"])
         css = "alert-approved" if status == "approved" else "alert-stockout"
@@ -147,15 +148,17 @@ def stockout_section() -> None:
             )
 
             with st.expander("Evidence"):
-                ev = p["root_cause_evidence"]
-                st.markdown(
-                    f"- Delivery: **{ev['delivery_day']} {ev['delivery_time']}** · "
-                    f"Peak demand: **{ev['demand_peak_window']}** · "
-                    f"Gap: **{ev['gap_hours']}h**"
-                )
-                for src in ev["data_sources"]:
-                    st.markdown(f"- {src}")
-                st.caption(p["calculation_basis"])
+                ev = p.get("root_cause_evidence", {})
+                if ev:
+                    st.markdown(
+                        f"- Delivery: **{ev.get('delivery_day', '—')} "
+                        f"{ev.get('delivery_time', '')}** · "
+                        f"Peak demand: **{ev.get('demand_peak_window', '—')}** · "
+                        f"Gap: **{ev.get('gap_hours', 0)}h**"
+                    )
+                    for src in ev.get("data_sources", []):
+                        st.markdown(f"- {src}")
+                st.caption(p.get("calculation_basis", ""))
 
             st.markdown(
                 f"**Draft PO:** {po['quantity']} units · urgency **{po['urgency']}** · "
@@ -168,9 +171,11 @@ def stockout_section() -> None:
                 a, b = st.columns(2)
                 if a.button("✅ Approve PO", key=f"ap_{po['po_id']}", type="primary"):
                     st.session_state.po_status[po["po_id"]] = "approved"
+                    data.approve_po(po["po_id"])
                     st.rerun()
                 if b.button("❌ Reject", key=f"rj_{po['po_id']}"):
                     st.session_state.po_status[po["po_id"]] = "rejected"
+                    data.reject_po(po["po_id"])
                     st.rerun()
             else:
                 st.success(f"PO {status.upper()} — status updated in AlloyDB")
@@ -180,7 +185,11 @@ def stockout_section() -> None:
 
 def perishable_section() -> None:
     st.subheader("Perishable discount proposals")
-    for a in perishable_alerts():
+    alerts = data.perishable_alerts()
+    if not alerts:
+        st.info("No perishable items at risk right now.")
+        return
+    for a in alerts:
         status = st.session_state.discount_status.get(a["product_id"], a["status"])
         css = "alert-approved" if status == "approved" else "alert-perishable"
 
@@ -213,6 +222,8 @@ def perishable_section() -> None:
                     "✅ Approve discount", key=f"apd_{a['product_id']}", type="primary"
                 ):
                     st.session_state.discount_status[a["product_id"]] = "approved"
+                    # Closed loop: flip discount_active=True so ARIA surfaces it.
+                    data.approve_discount(a["product_id"])
                     st.rerun()
                 if a2.button("❌ Reject", key=f"rjd_{a['product_id']}"):
                     st.session_state.discount_status[a["product_id"]] = "rejected"

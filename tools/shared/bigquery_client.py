@@ -51,33 +51,10 @@ class MockBigQueryClient(BigQueryClient):
         self._seed_demo_incidents()
 
     def _seed_demo_incidents(self) -> None:
-        """Pre-load the brown-rice stockout pattern so PULSE has data on a
-        cold start. Incidents cluster in the Mon–Wed 10:00–12:00 morning peak
-        (the documented scenario), so the computed peak window is 10:00-12:00
-        and the gap vs the Tuesday 14:00 delivery is ~4h."""
-        # Oct 13 = Mon, 14 = Tue, 15 = Wed, 2026. Spread 8 incidents across
-        # those mornings at 10:00/11:00.
-        slots = [
-            datetime(2026, 10, 15, 10, 15), datetime(2026, 10, 15, 11, 30),
-            datetime(2026, 10, 16, 10, 5), datetime(2026, 10, 16, 11, 45),
-            datetime(2026, 10, 16, 10, 50), datetime(2026, 10, 17, 10, 20),
-            datetime(2026, 10, 17, 11, 10), datetime(2026, 10, 17, 10, 40),
-        ]
-        for i in range(8):
-            sid = f"seed_sess_{i:02d}"
-            self._incidents[sid] = {
-                "session_id": sid,
-                "customer_id": "sarah_123",
-                "store_id": "dubai_marina_01",
-                "timestamp": slots[i].isoformat(),
-                "items_ordered": [],
-                "items_unavailable": [{"product_id": "rice_brown_500g", "product_name": "Brown Rice 500g"}],
-                "substitutions_offered": [{"original_product_id": "rice_brown_500g", "substitute_product_id": "rice_basmati_5kg", "accepted": i % 2 == 0}],
-                "cart_total_aed": 285.0,
-                "session_sentiment": "neutral",
-                "order_placed": i % 3 != 0,
-                "abandonment_reason": None if i % 3 != 0 else "item_unavailable",
-            }
+        """Pre-load the brown-rice stockout pattern (shared seed) so PULSE has
+        data on a cold start. Clusters in the Mon–Wed 10:00-12:00 peak."""
+        for row in _demo_seed_incidents():
+            self._incidents[row["session_id"]] = row
 
     def insert_incident(self, incident: dict) -> dict:
         sid = incident.get("session_id") or str(uuid.uuid4())
@@ -86,69 +63,9 @@ class MockBigQueryClient(BigQueryClient):
         return {"session_id": sid, "logged": True, "timestamp": datetime.now().isoformat()}
 
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
-        cutoff = datetime(2026, 10, 17, 11, 0, 0) - timedelta(hours=hours)
-        # Per-product accumulators.
-        agg: dict[str, dict] = {}
-        for inc in self._incidents.values():
-            if inc.get("store_id") != store_id:
-                continue
-            try:
-                ts = datetime.fromisoformat(inc["timestamp"])
-            except (KeyError, ValueError):
-                continue
-            if ts < cutoff:
-                continue
-            for item in inc.get("items_unavailable", []):
-                pid = item.get("product_id")
-                if not pid:
-                    continue
-                a = agg.setdefault(pid, {
-                    "name": item.get("product_name", pid), "count": 0, "carts": [],
-                    "abandon": 0, "first": ts, "last": ts, "sessions": [],
-                    "subs_total": 0, "subs_accepted": 0, "hours": Counter(),
-                })
-                a["count"] += 1
-                a["carts"].append(float(inc.get("cart_total_aed", 0.0)))
-                if not inc.get("order_placed", True):
-                    a["abandon"] += 1
-                a["first"] = min(a["first"], ts)
-                a["last"] = max(a["last"], ts)
-                if len(a["sessions"]) < 3:
-                    a["sessions"].append(inc.get("session_id", ""))
-                a["hours"][ts.hour] += 1
-                for s in inc.get("substitutions_offered", []):
-                    a["subs_total"] += 1
-                    if s.get("accepted"):
-                        a["subs_accepted"] += 1
-
-        patterns = []
-        for pid, a in agg.items():
-            if a["count"] < min_incidents:
-                continue
-            avg_cart = sum(a["carts"]) / len(a["carts"]) if a["carts"] else 0.0
-            peak_hour_num = a["hours"].most_common(1)[0][0] if a["hours"] else 10
-            sub_rate = round(a["subs_accepted"] / a["subs_total"], 2) if a["subs_total"] else 0.0
-            patterns.append(
-                {
-                    "product_id": pid,
-                    "product_name": a["name"],
-                    "store_id": store_id,
-                    "incident_count": a["count"],
-                    "period_hours": hours,
-                    "estimated_revenue_lost_aed": round(a["count"] * avg_cart * 0.15, 2),
-                    "abandonment_count": a["abandon"],
-                    "average_cart_aed": round(avg_cart, 2),
-                    "peak_hour": f"{peak_hour_num:02d}:00-{peak_hour_num + 2:02d}:00",
-                    "evidence": {
-                        "first_incident": a["first"].isoformat(),
-                        "last_incident": a["last"].isoformat(),
-                        "sample_session_ids": a["sessions"],
-                        "substitution_acceptance_rate": sub_rate,
-                    },
-                }
-            )
-        patterns.sort(key=lambda p: p["estimated_revenue_lost_aed"], reverse=True)
-        return patterns
+        return _aggregate_patterns(
+            list(self._incidents.values()), store_id=store_id, hours=hours, min_incidents=min_incidents
+        )
 
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
         # ARIMA_PLUS cannot be emulated locally — return a canned forecast.
@@ -183,6 +100,157 @@ class MockBigQueryClient(BigQueryClient):
         return "new" if count == 0 else "recurring"
 
 
+# ── Shared aggregation used by both mock + sqlite (identical semantics) ──
+def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
+    cutoff = datetime(2026, 10, 17, 11, 0, 0) - timedelta(hours=hours)
+    agg: dict[str, dict] = {}
+    for inc in incidents:
+        if inc.get("store_id") != store_id:
+            continue
+        try:
+            ts = datetime.fromisoformat(inc["timestamp"])
+        except (KeyError, ValueError):
+            continue
+        if ts < cutoff:
+            continue
+        for item in inc.get("items_unavailable", []):
+            pid = item.get("product_id")
+            if not pid:
+                continue
+            a = agg.setdefault(pid, {
+                "name": item.get("product_name", pid), "count": 0, "carts": [],
+                "abandon": 0, "first": ts, "last": ts, "sessions": [],
+                "subs_total": 0, "subs_accepted": 0, "hours": Counter(),
+            })
+            a["count"] += 1
+            a["carts"].append(float(inc.get("cart_total_aed", 0.0)))
+            if not inc.get("order_placed", True):
+                a["abandon"] += 1
+            a["first"] = min(a["first"], ts)
+            a["last"] = max(a["last"], ts)
+            if len(a["sessions"]) < 3:
+                a["sessions"].append(inc.get("session_id", ""))
+            a["hours"][ts.hour] += 1
+            for s in inc.get("substitutions_offered", []):
+                a["subs_total"] += 1
+                if s.get("accepted"):
+                    a["subs_accepted"] += 1
+
+    patterns = []
+    for pid, a in agg.items():
+        if a["count"] < min_incidents:
+            continue
+        avg_cart = sum(a["carts"]) / len(a["carts"]) if a["carts"] else 0.0
+        peak = a["hours"].most_common(1)[0][0] if a["hours"] else 10
+        sub_rate = round(a["subs_accepted"] / a["subs_total"], 2) if a["subs_total"] else 0.0
+        patterns.append({
+            "product_id": pid, "product_name": a["name"], "store_id": store_id,
+            "incident_count": a["count"], "period_hours": hours,
+            "estimated_revenue_lost_aed": round(a["count"] * avg_cart * 0.15, 2),
+            "abandonment_count": a["abandon"], "average_cart_aed": round(avg_cart, 2),
+            "peak_hour": f"{peak:02d}:00-{peak + 2:02d}:00",
+            "evidence": {
+                "first_incident": a["first"].isoformat(),
+                "last_incident": a["last"].isoformat(),
+                "sample_session_ids": a["sessions"],
+                "substitution_acceptance_rate": sub_rate,
+            },
+        })
+    patterns.sort(key=lambda p: p["estimated_revenue_lost_aed"], reverse=True)
+    return patterns
+
+
+_CANNED_FORECAST = {
+    "predicted_stockout_date": "2026-10-20", "days_until_stockout": 3, "confidence": 0.82,
+    "current_stock": 0, "daily_consumption_rate": 4.5,
+    "evidence": {"model": "BigQuery ML ARIMA_PLUS (mock)", "training_period": "Oct 1–17 2026", "data_points_used": 17},
+}
+_VELOCITIES = {"laban_almarai_1l": 8.5, "milk_almarai_2l": 12.0, "bread_white_loaf": 15.0, "croissant_4pk": 5.0}
+
+
+def _demo_seed_incidents() -> list[dict]:
+    """The Mon–Wed 10:00-12:00 brown-rice stockout cluster (shared seed)."""
+    slots = [
+        datetime(2026, 10, 15, 10, 15), datetime(2026, 10, 15, 11, 30),
+        datetime(2026, 10, 16, 10, 5), datetime(2026, 10, 16, 11, 45),
+        datetime(2026, 10, 16, 10, 50), datetime(2026, 10, 17, 10, 20),
+        datetime(2026, 10, 17, 11, 10), datetime(2026, 10, 17, 10, 40),
+    ]
+    rows = []
+    for i in range(8):
+        rows.append({
+            "session_id": f"seed_sess_{i:02d}", "customer_id": "sarah_123",
+            "store_id": "dubai_marina_01", "timestamp": slots[i].isoformat(),
+            "items_ordered": [], "items_unavailable": [{"product_id": "rice_brown_500g", "product_name": "Brown Rice 500g"}],
+            "substitutions_offered": [{"original_product_id": "rice_brown_500g", "substitute_product_id": "rice_basmati_5kg", "accepted": i % 2 == 0}],
+            "cart_total_aed": 285.0, "session_sentiment": "neutral",
+            "order_placed": i % 3 != 0, "abandonment_reason": None if i % 3 != 0 else "item_unavailable",
+        })
+    return rows
+
+
+class SqliteBigQueryClient(BigQueryClient):
+    """File-backed SQLite bridge (stdlib sqlite3) so ARIA + PULSE in SEPARATE
+    processes share the incidents table. Same interface + semantics as the mock;
+    only storage differs. Selected when settings.arc_bridge_db is set."""
+
+    def __init__(self, db_path: str) -> None:
+        import json
+        import sqlite3
+
+        self._json = json
+        self._db_path = db_path
+        self._conn = sqlite3.connect(db_path, isolation_level=None)  # autocommit
+        self._conn.execute("PRAGMA journal_mode=WAL")  # safe concurrent readers
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS arc_incidents (session_id TEXT PRIMARY KEY, payload TEXT)"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS arc_sub_gaps (product_id TEXT, store_id TEXT, n INTEGER, PRIMARY KEY(product_id, store_id))"
+        )
+        # Seed demo incidents once (idempotent on session_id).
+        cur = self._conn.execute("SELECT COUNT(*) FROM arc_incidents")
+        if cur.fetchone()[0] == 0:
+            for row in _demo_seed_incidents():
+                self.insert_incident(row)
+
+    def _all_incidents(self) -> list[dict]:
+        cur = self._conn.execute("SELECT payload FROM arc_incidents")
+        return [self._json.loads(r[0]) for r in cur.fetchall()]
+
+    def insert_incident(self, incident: dict) -> dict:
+        sid = incident.get("session_id") or str(uuid.uuid4())
+        record = {**incident, "session_id": sid}
+        # INSERT OR IGNORE = idempotent on session_id (primary key).
+        self._conn.execute(
+            "INSERT OR IGNORE INTO arc_incidents(session_id, payload) VALUES (?, ?)",
+            (sid, self._json.dumps(record)),
+        )
+        return {"session_id": sid, "logged": True, "timestamp": datetime.now().isoformat()}
+
+    def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
+        return _aggregate_patterns(self._all_incidents(), store_id=store_id, hours=hours, min_incidents=min_incidents)
+
+    def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
+        return dict(_CANNED_FORECAST)
+
+    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
+        return _VELOCITIES.get(product_id, 3.0)
+
+    def record_substitution_gap(self, *, product_id: str, store_id: str) -> str:
+        cur = self._conn.execute(
+            "SELECT n FROM arc_sub_gaps WHERE product_id=? AND store_id=?", (product_id, store_id)
+        )
+        row = cur.fetchone()
+        n = row[0] if row else 0
+        self._conn.execute(
+            "INSERT INTO arc_sub_gaps(product_id, store_id, n) VALUES (?,?,?) "
+            "ON CONFLICT(product_id, store_id) DO UPDATE SET n=?",
+            (product_id, store_id, n + 1, n + 1),
+        )
+        return "new" if n == 0 else "recurring"
+
+
 class RealBigQueryClient(BigQueryClient):
     """TODO(backend): implement with google.cloud.bigquery. Note ARIMA_PLUS has
     no local emulator, so forecast_stockout must run against real BigQuery ML."""
@@ -204,7 +272,18 @@ _client: BigQueryClient | None = None
 
 
 def get_bigquery() -> BigQueryClient:
+    """Factory. Selection order keeps real GCP a pure config switch:
+      use_mock=False            -> RealBigQueryClient   (real BigQuery)
+      mock + ARC_BRIDGE_DB set  -> SqliteBigQueryClient (cross-process demo)
+      mock (default)            -> MockBigQueryClient   (in-memory, tests)
+    No tool/agent/dashboard code changes when swapping to real BigQuery.
+    """
     global _client
     if _client is None:
-        _client = MockBigQueryClient() if settings.use_mock else RealBigQueryClient()
+        if not settings.use_mock:
+            _client = RealBigQueryClient()
+        elif settings.arc_bridge_db:
+            _client = SqliteBigQueryClient(settings.arc_bridge_db)
+        else:
+            _client = MockBigQueryClient()
     return _client

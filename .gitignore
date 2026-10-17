@@ -36,3 +36,6 @@ htmlcov/
 
 # Docker
 .dockerignore
+data/arc_bridge.db
+data/arc_bridge.db-wal
+data/arc_bridge.db-shm

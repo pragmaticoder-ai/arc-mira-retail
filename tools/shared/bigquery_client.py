@@ -16,7 +16,6 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Any
 
 from tools.shared.settings import settings
 

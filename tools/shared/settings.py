@@ -54,6 +54,10 @@ class Settings:
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "textembedding-gecko@003")
     embedding_dim: int = int(os.getenv("EMBEDDING_DIM", "768"))
 
+    # ── Rate limiting ────────────────────────────────────────────────
+    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    rate_limit_burst: int = int(os.getenv("RATE_LIMIT_BURST", "10"))
+
     # ── Environment ──────────────────────────────────────────────────
     environment: str = os.getenv("ENVIRONMENT", "development")
     log_level: str = os.getenv("LOG_LEVEL", "INFO")

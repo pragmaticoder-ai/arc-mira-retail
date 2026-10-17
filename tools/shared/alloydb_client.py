@@ -14,7 +14,6 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import Any
 
 from tools.shared.settings import settings
 

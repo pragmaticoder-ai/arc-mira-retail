@@ -24,10 +24,13 @@ def detect_patterns(store_id: str, hours: int = 48, min_incidents: int = 5) -> d
     incidents in the window, ranked by estimated revenue impact in AED.
     Always call this first — it is the starting point for all PULSE analysis.
     """
-    if not store_id:
+    # ── Validation (SPEC-PULSE-01 §4) ────────────────────────────────
+    if not (store_id or "").strip():
         return error("VALIDATION_ERROR", "store_id is required")
-    if hours <= 0 or min_incidents <= 0:
-        return error("VALIDATION_ERROR", "hours and min_incidents must be > 0")
+    if not (1 <= hours <= 168):
+        return error("VALIDATION_ERROR", "hours must be 1..168")
+    if not (1 <= min_incidents <= 100):
+        return error("VALIDATION_ERROR", "min_incidents must be 1..100")
 
     bq = get_bigquery()
     raw = bq.detect_stockout_patterns(store_id=store_id, hours=hours, min_incidents=min_incidents)
@@ -42,20 +45,16 @@ def detect_patterns(store_id: str, hours: int = 48, min_incidents: int = 5) -> d
                 "incident_count": p["incident_count"],
                 "period_hours": hours,
                 "estimated_revenue_lost_aed": p["estimated_revenue_lost_aed"],
-                "peak_hour": "10:00–12:00",
+                "peak_hour": p.get("peak_hour", "10:00-12:00"),
                 "abandonment_count": p.get("abandonment_count", 0),
                 "average_cart_aed": p.get("average_cart_aed", 0.0),
-                "evidence": {
-                    "first_incident": "",
-                    "last_incident": "",
-                    "sample_session_ids": [],
-                    "substitution_acceptance_rate": 0.5,
-                },
+                "evidence": p.get("evidence", {}),
             }
         )
     patterns.sort(key=lambda x: x["estimated_revenue_lost_aed"], reverse=True)
 
-    logger.info("detect_patterns", tool="detect_patterns", store_id=store_id, patterns=len(patterns), status="success")
+    logger.info("detect_patterns", tool="detect_patterns", store_id=store_id,
+                patterns_found=len(patterns), hours=hours, status="success")
     return {"patterns": patterns}
 
 

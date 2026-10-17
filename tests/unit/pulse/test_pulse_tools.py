@@ -38,19 +38,25 @@ def test_detect_patterns_respects_min_incidents(store_id):
 
 # ── find_root_cause (SPEC-PULSE-02) ──────────────────────────────────
 def test_find_root_cause_has_evidence(store_id):
-    r = find_root_cause("rice_brown_500g", store_id, "10:00–12:00", 8, 48)
+    r = find_root_cause("rice_brown_500g", store_id, "10:00-12:00", 8, 48)
     assert r["confidence_level"] in ("High", "Medium", "Low")
     assert r["evidence"]["data_sources"]  # mandatory evidence block
 
 
 def test_find_root_cause_confidence_medium(store_id):
-    r = find_root_cause("rice_brown_500g", store_id, "10:00–12:00", 8, 48)
+    r = find_root_cause("rice_brown_500g", store_id, "10:00-12:00", 8, 48)
     assert r["confidence_level"] == "Medium"  # 5-9 incidents
 
 
 def test_find_root_cause_product_not_found(store_id):
-    r = find_root_cause("nope", store_id, "10:00–12:00", 8, 48)
+    # Valid peak_hour (hyphen, not en-dash) so we reach the product lookup.
+    r = find_root_cause("nope", store_id, "10:00-12:00", 8, 48)
     assert r.get("error") and r["error_code"] == "NOT_FOUND"
+
+
+def test_find_root_cause_rejects_bad_peak_hour(store_id):
+    r = find_root_cause("rice_brown_500g", store_id, "morning", 8, 48)
+    assert r.get("error") and r["error_code"] == "VALIDATION_ERROR"
 
 
 # ── predict_stockout (SPEC-PULSE-03) ─────────────────────────────────

@@ -6,6 +6,8 @@ dietary preference and min-cart threshold. Returns null application if none fit.
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -29,19 +31,49 @@ def _discount_for(promo: dict, cart_total_aed: float) -> float:
     return 0.0
 
 
+_VALID_DIET = {"halal", "vegetarian", "vegan", "none"}
+# Reference "today" for deterministic validity checks in mock mode.
+_TODAY = date(2026, 10, 17)
+# Session-scoped idempotency: promotions already applied this session.
+_applied_this_session: set[tuple[str, str]] = set()
+
+
+def _is_valid_now(promo: dict) -> bool:
+    if not promo.get("is_active"):
+        return False
+    vf, vu = promo.get("valid_from"), promo.get("valid_until")
+    try:
+        if vf and date.fromisoformat(vf) > _TODAY:
+            return False
+        if vu and date.fromisoformat(vu) < _TODAY:
+            return False
+    except ValueError:
+        return False
+    max_uses = promo.get("max_uses")
+    if max_uses is not None and int(promo.get("times_applied", 0)) >= int(max_uses):
+        return False
+    return True
+
+
 def apply_promotion(
     cart: list[dict],
     cart_total_aed: float,
     dietary_preference: str,
     store_id: str,
+    session_id: str | None = None,
 ) -> dict:
     """
     Checks the promotions table for applicable active promotions. Applies the
     highest-value relevant promotion matching dietary_preference. Returns
     promotion details and new_total_aed. Call after optimize_budget().
     """
-    if not isinstance(cart, list):
-        return error("VALIDATION_ERROR", "cart must be a list")
+    # ── Validation (SPEC-ARIA-07 §4) ─────────────────────────────────
+    if not isinstance(cart, list) or len(cart) < 1:
+        return error("VALIDATION_ERROR", "cart must have at least 1 item")
+    if cart_total_aed is None or cart_total_aed <= 0:
+        return error("VALIDATION_ERROR", "cart_total_aed must be > 0")
+    if dietary_preference not in _VALID_DIET:
+        return error("VALIDATION_ERROR", f"invalid dietary_preference: {dietary_preference}")
 
     db = get_alloydb()
     promos = db.list_active_promotions(store_id)
@@ -55,6 +87,8 @@ def apply_promotion(
     best = None
     best_discount = 0.0
     for promo in promos:
+        if not _is_valid_now(promo):  # expiry + max_uses + active
+            continue
         if cart_total_aed < float(promo.get("min_cart_aed", 0)):
             continue
         df = promo.get("dietary_filter")
@@ -74,10 +108,22 @@ def apply_promotion(
             "promotion_name": None,
             "discount_aed": 0.0,
             "new_total_aed": round(cart_total_aed, 2),
-            "reason": "No applicable promotion for this cart",
+            "reason": "No applicable promotions for this cart",
         }
 
     new_total = round(cart_total_aed - best_discount, 2)
+    # A promotion can never make the cart free/negative (SPEC-ARIA-07 §6).
+    if new_total <= 0:
+        return error("UNPROCESSABLE", "promotion would reduce the cart to zero or below")
+
+    # Idempotency: applying the same promotion twice in a session is a no-op
+    # on the usage counter (SPEC-ARIA-07 §9).
+    key = (session_id or "", best["promotion_id"])
+    if session_id is None or key not in _applied_this_session:
+        db.increment_promotion_usage(best["promotion_id"])
+        if session_id is not None:
+            _applied_this_session.add(key)
+
     result = {
         "promotion_applied": True,
         "promotion_id": best["promotion_id"],
@@ -91,6 +137,7 @@ def apply_promotion(
         tool="apply_promotion",
         promotion_id=best["promotion_id"],
         discount_aed=best_discount,
+        cart_total_before=round(cart_total_aed, 2),
         status="success",
     )
     return result
@@ -101,8 +148,11 @@ class ApplyPromotionRequest(BaseModel):
     cart_total_aed: float
     dietary_preference: str
     store_id: str
+    session_id: str | None = None
 
 
 @router.post("/tools/apply-promotion")
 async def apply_promotion_endpoint(req: ApplyPromotionRequest) -> dict:
-    return apply_promotion(req.cart, req.cart_total_aed, req.dietary_preference, req.store_id)
+    return apply_promotion(
+        req.cart, req.cart_total_aed, req.dietary_preference, req.store_id, req.session_id
+    )

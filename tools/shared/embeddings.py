@@ -1,27 +1,99 @@
-"""Embeddings adapter (textembedding-gecko) — placeholder with mock impl.
+"""Embeddings adapter — real TF-IDF semantic vectors (pure Python, no deps).
 
-Used to embed product text for AlloyDB AI vector search. Tools never call the
-embedding SDK directly; they go through this interface.
+In production this is replaced by Vertex AI textembedding-gecko (RealEmbeddings,
+TODO). The mock computes a genuine TF-IDF vector over a fixed product-text
+vocabulary so cosine similarity is semantically meaningful: "brown rice" lands
+near other rice/grain products, not unrelated items. Deterministic and offline.
 
-Mock returns a deterministic pseudo-embedding derived from the input hash, so
-similarity ordering is stable and reproducible offline. Real implementation
-(TODO) calls Vertex AI text embeddings.
+The vocabulary + IDF are derived from the shared product corpus once, so every
+embed() call projects into the same space (required for meaningful cosine).
 """
 
 from __future__ import annotations
 
-import hashlib
+import math
+import re
 from abc import ABC, abstractmethod
 
 import httpx
 
 from tools.shared.settings import settings
 
+_TOKEN = re.compile(r"[a-z0-9]+")
+
+
+def product_document(p: dict) -> str:
+    """Canonical text for a product. The name is weighted (repeated) because
+    it carries the most discriminative signal (e.g. 'rice'), and the category
+    is included so same-category items cluster. Shared by the corpus builder
+    and callers so query/doc vectors live in the same space."""
+    name = p["product_name"]
+    return f"{name} {name} {p['category']} {p['category']} {p.get('brand', '')} {p['dietary_flags']}"
+
+
+def _tokenize(text: str) -> list[str]:
+    # Lowercase word tokens; split size tokens like "500g" into "500" + "g".
+    raw = _TOKEN.findall(text.lower())
+    out: list[str] = []
+    for t in raw:
+        m = re.match(r"^(\d+)([a-z]+)$", t)
+        if m:
+            out.extend([m.group(1), m.group(2)])
+        else:
+            out.append(t)
+    return out
+
+
+class _TfidfSpace:
+    """Fixed TF-IDF vector space built from the product corpus (built once)."""
+
+    def __init__(self) -> None:
+        self.vocab: dict[str, int] = {}
+        self.idf: dict[str, float] = {}
+        self._built = False
+
+    def _corpus(self) -> list[str]:
+        from tools.shared.mock_inventory import MOCK_INVENTORY
+
+        return [product_document(p) for p in MOCK_INVENTORY]
+
+    def build(self) -> None:
+        if self._built:
+            return
+        docs = self._corpus()
+        df: dict[str, int] = {}
+        for doc in docs:
+            for tok in set(_tokenize(doc)):
+                df[tok] = df.get(tok, 0) + 1
+        n = max(1, len(docs))
+        self.vocab = {tok: i for i, tok in enumerate(sorted(df))}
+        self.idf = {tok: math.log((1 + n) / (1 + c)) + 1.0 for tok, c in df.items()}
+        self._built = True
+
+    def vectorize(self, text: str) -> list[float]:
+        self.build()
+        vec = [0.0] * len(self.vocab)
+        toks = _tokenize(text)
+        if not toks:
+            return vec
+        tf: dict[str, int] = {}
+        for t in toks:
+            tf[t] = tf.get(t, 0) + 1
+        for tok, count in tf.items():
+            idx = self.vocab.get(tok)
+            if idx is None:
+                continue  # out-of-vocabulary token (unseen in corpus)
+            vec[idx] = (count / len(toks)) * self.idf.get(tok, 0.0)
+        return vec
+
+
+_SPACE = _TfidfSpace()
+
 
 class Embeddings(ABC):
     @abstractmethod
     def embed(self, text: str) -> list[float]:
-        """Return an embedding_dim-length vector for the text."""
+        """Return a TF-IDF vector for the text in the shared product space."""
 
 
 class MockEmbeddings(Embeddings):
@@ -34,20 +106,12 @@ class MockEmbeddings(Embeddings):
             )
             resp.raise_for_status()
             return resp.json()["embedding"]
-        return self._deterministic(text)
-
-    @staticmethod
-    def _deterministic(text: str) -> list[float]:
-        dim = settings.embedding_dim
-        digest = hashlib.sha256(text.lower().encode()).digest()
-        # Expand the 32-byte digest into a dim-length vector in [-1, 1].
-        vals = [((digest[i % len(digest)] / 255.0) * 2.0) - 1.0 for i in range(dim)]
-        return vals
+        return _SPACE.vectorize(text)
 
 
 class RealEmbeddings(Embeddings):
-    """TODO(backend): implement with vertexai.language_models
-    TextEmbeddingModel.from_pretrained(settings.embedding_model)."""
+    """TODO(backend): vertexai.language_models.TextEmbeddingModel
+    .from_pretrained(settings.embedding_model).get_embeddings([text])."""
 
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError(

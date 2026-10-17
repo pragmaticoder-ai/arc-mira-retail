@@ -16,6 +16,33 @@ os.environ.setdefault("USE_MOCK", "true")
 os.environ.setdefault("ENVIRONMENT", "development")
 
 
+@pytest.fixture(autouse=True)
+def _reset_state():
+    """Reset all mock singletons + in-module session caches before EVERY test,
+    so tools that mutate state (orders, stock, promo usage) don't leak across
+    tests. Runs even for tests that don't request the db fixtures."""
+    import tools.shared.alloydb_client as adb
+    import tools.shared.bigquery_client as bqc
+
+    adb._client = None
+    bqc._client = None
+
+    # Session-scoped caches inside tool modules.
+    try:
+        import tools.aria_tools.apply_promotion as ap
+        ap._applied_this_session.clear()
+    except Exception:
+        pass
+    try:
+        import tools.aria_tools.place_order as po
+        po._recent.clear()
+    except Exception:
+        pass
+    yield
+    adb._client = None
+    bqc._client = None
+
+
 @pytest.fixture()
 def alloydb():
     """Fresh mock AlloyDB client per test (resets in-session writes)."""

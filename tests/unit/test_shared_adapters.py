@@ -33,7 +33,12 @@ def test_alloydb_order_write(alloydb, store_id, customer_id):
 
 
 def test_bigquery_bridge_insert_then_detect(bigquery, store_id):
-    # Seeded with 8 brown-rice incidents; add one more live.
+    # Count increases by exactly 1 after a live insert (don't hardcode baseline).
+    def brown_rice_count():
+        pats = bigquery.detect_stockout_patterns(store_id=store_id, hours=48, min_incidents=1)
+        return next((p["incident_count"] for p in pats if p["product_id"] == "rice_brown_500g"), 0)
+
+    before = brown_rice_count()
     bigquery.insert_incident(
         {
             "session_id": "t_live",
@@ -44,8 +49,7 @@ def test_bigquery_bridge_insert_then_detect(bigquery, store_id):
             "order_placed": False,
         }
     )
-    patterns = bigquery.detect_stockout_patterns(store_id=store_id, hours=48, min_incidents=5)
-    assert any(p["product_id"] == "rice_brown_500g" and p["incident_count"] >= 9 for p in patterns)
+    assert brown_rice_count() == before + 1
 
 
 def test_bigquery_insert_idempotent(bigquery, store_id):

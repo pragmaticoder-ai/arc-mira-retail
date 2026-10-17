@@ -5,6 +5,8 @@ Mock-mode, no Docker. Covers the key cases from each spec's test section.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from tools.aria_tools.apply_promotion import apply_promotion
@@ -114,13 +116,24 @@ def test_suggest_substitution_product_not_found(store_id):
 
 # ── optimize_budget (SPEC-ARIA-06) ───────────────────────────────────
 def test_optimize_budget_brings_within_target():
+    # Many small units so trimming lands within the [85%, 100%] band.
     cart = [
-        {"product_id": "a", "product_name": "A", "quantity": 1, "price_aed": 50.0, "aisle_ref": "", "in_stock": True},
-        {"product_id": "b", "product_name": "B", "quantity": 1, "price_aed": 40.0, "aisle_ref": "", "in_stock": True},
+        {"product_id": "a", "product_name": "A", "quantity": 10, "price_aed": 12.0, "aisle_ref": "", "in_stock": True},
+        {"product_id": "b", "product_name": "B", "quantity": 5, "price_aed": 10.0, "aisle_ref": "", "in_stock": True},
     ]
-    r = optimize_budget(cart, 60.0)
-    assert r["new_total_aed"] <= 60.0
+    r = optimize_budget(cart, 150.0)
+    assert not r.get("error")
+    assert 150.0 * 0.85 <= r["new_total_aed"] <= 150.0
     assert r["changes_made"]
+
+
+def test_optimize_budget_unprocessable_when_over_trim():
+    cart = [
+        {"product_id": "a", "product_name": "A", "quantity": 1, "price_aed": 200.0, "aisle_ref": "", "in_stock": True},
+        {"product_id": "b", "product_name": "B", "quantity": 1, "price_aed": 150.0, "aisle_ref": "", "in_stock": True},
+    ]
+    r = optimize_budget(cart, 300.0)
+    assert r.get("error") and r["error_code"] == "UNPROCESSABLE"
 
 
 # ── apply_promotion (SPEC-ARIA-07) ───────────────────────────────────
@@ -147,6 +160,12 @@ def test_place_order_empty_cart(store_id, customer_id):
 
 # ── log_session (SPEC-ARIA-09) ───────────────────────────────────────
 def test_log_session_writes_bridge(store_id, customer_id):
-    r = log_session("sess_x", customer_id, store_id, [], [], [], None, 0.0, 0.0, 300.0, "neutral", False)
+    sid = str(uuid.uuid4())
+    r = log_session(sid, customer_id, store_id, [], [], [], None, 0.0, 0.0, 300.0, "neutral", False)
     assert r["logged"] is True
-    assert r["session_id"] == "sess_x"
+    assert r["session_id"] == sid
+
+
+def test_log_session_rejects_non_uuid(store_id, customer_id):
+    r = log_session("sess_x", customer_id, store_id, [], [], [], None, 0.0, 0.0, 300.0, "neutral", False)
+    assert r.get("error") and r["error_code"] == "VALIDATION_ERROR"

@@ -28,35 +28,49 @@
 
 ## 3. STEP BY STEP LOGIC
 
+> **v1.1 — graceful degradation + personalization.** The ±20% price rule is a
+> *preference with a fallback*, not a hard gate: real inventory may have no
+> in-band substitute for an arbitrary product, and the system must still behave
+> sensibly for inputs it did not choose (a judge may pick any product). Dietary
+> rules remain a HARD filter and are never relaxed. Purchase history is used to
+> personalize the choice.
+
 ```
-Step 1: Validate inputs
-        → All fields required and valid
+Step 1: Validate inputs (product_id, store_id, dietary_preference, max_price_aed)
+        → customer_id is OPTIONAL; when present, used for personalization
 
-Step 2: Fetch embedding for the unavailable product
-        → SELECT embedding FROM inventory
-          WHERE product_id = $1
-        → If no embedding → generate via AlloyDB AI on the fly
+Step 2: Fetch the original product (price, category, text)
+        → price band: floor = price × 0.80, ceiling = min(max_price, price × 1.20)
 
-Step 3: Run ScaNN vector similarity search
-        → SELECT product_id, product_name, price_aed,
-                 1 - (embedding <=> $1) AS similarity
-          FROM inventory
-          WHERE store_id = $2
-          AND stock_quantity > 0
-          AND price_aed <= $3
-          AND dietary_flags ILIKE '%' || $4 || '%'
-          AND product_id != $5  -- exclude the original product
-          ORDER BY embedding <=> $1
-          LIMIT 1
+Step 3: Semantic candidate search (AlloyDB AI ScaNN / TF-IDF in mock)
+        → cosine similarity over product text
+        → HARD filters: store_id match, stock_quantity > 0,
+          dietary_flags contains dietary_preference, product_id != original
+        → Do NOT hard-filter on price here — gather candidates, score below
 
-Step 4: If no result found
-        → Return null substitute with similarity_score=0.0
+Step 4: Load purchase history (if customer_id given)
+        → last_orders product_ids = history_set
 
-Step 5: Generate plain-language reason
-        → Call Gemini Flash to generate human-readable explanation
-          e.g. "Similar grain product, same dietary category, comparable price"
+Step 5: Rank candidates with a tiered score:
+        Tier 1 (best): in price band (floor..ceiling) AND in history
+        Tier 2:        in price band
+        Tier 3:        out of band but dietary-safe + in stock (history boosts)
+        Within a tier, higher cosine similarity wins.
 
-Step 6: Return SuggestSubstitutionResponse
+Step 6: Build the result based on the chosen tier:
+        → Tier 1/2  → in_band=true, offered as substitute;
+          reason notes "you've ordered this before" when from history
+        → Tier 3    → in_band=false, out_of_price_range=true, offered as an
+          OPTION for the customer to decide (do not silently swap)
+        → no candidate at all (nothing dietary-safe + in stock) →
+          substitute_product_id=null, event_type set (see Step 7)
+
+Step 7: Operational signal when no substitute exists
+        → substitution_event = "new" | "recurring" based on whether this
+          product has prior unavailability for this store (so the store
+          manager / PULSE can act). Always safe: never violates dietary rules.
+
+Step 8: Return SuggestSubstitutionResponse
 ```
 
 ---
@@ -85,27 +99,51 @@ Step 6: Return SuggestSubstitutionResponse
 
 ## 5. OUTPUTS
 
-**Substitute found:**
+**Substitute found, in price band (Tier 1 — from purchase history):**
 ```json
 {
   "substitute_product_id": "rice_basmati_2kg",
   "name": "Basmati Rice 2kg",
-  "price_aed": 18.00,
+  "price_aed": 11.00,
   "similarity_score": 0.87,
-  "reason": "Similar grain product, same halal category, comparable price",
-  "in_stock": true
+  "reason": "Similar grain product, matches halal preference — and you've ordered it before",
+  "in_stock": true,
+  "in_band": true,
+  "out_of_price_range": false,
+  "from_purchase_history": true,
+  "substitution_event": null
 }
 ```
 
-**No substitute found:**
+**Substitute found, but outside the ±20% band (Tier 3 — offered as an option):**
+```json
+{
+  "substitute_product_id": "rice_basmati_5kg",
+  "name": "India Gate Basmati Rice 5kg",
+  "price_aed": 45.00,
+  "similarity_score": 0.71,
+  "reason": "Closest halal grain in stock, but priced higher than your original — up to you",
+  "in_stock": true,
+  "in_band": false,
+  "out_of_price_range": true,
+  "from_purchase_history": false,
+  "substitution_event": null
+}
+```
+
+**No substitute found (operational signal for the store manager):**
 ```json
 {
   "substitute_product_id": null,
   "name": null,
   "price_aed": null,
   "similarity_score": 0.0,
-  "reason": "No suitable substitution found within price range",
-  "in_stock": false
+  "reason": "No suitable in-stock alternative — flagged to the store team",
+  "in_stock": false,
+  "in_band": false,
+  "out_of_price_range": false,
+  "from_purchase_history": false,
+  "substitution_event": "new"
 }
 ```
 

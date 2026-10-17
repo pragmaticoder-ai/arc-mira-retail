@@ -47,6 +47,13 @@ class Settings:
     bigquery_dataset: str = os.getenv("BIGQUERY_DATASET", "arc_dataset")
     bigquery_location: str = os.getenv("BIGQUERY_LOCATION", "asia-southeast1")
 
+    # Optional file-backed SQLite bridge (stdlib) so ARIA and PULSE running in
+    # SEPARATE processes share the incidents bridge for a live cross-app demo.
+    # Unset -> in-process mock dict (default; used by tests). Set to a file path
+    # (e.g. data/arc_bridge.db) and point both processes at it. Real BigQuery
+    # takes over unchanged when USE_MOCK=false.
+    arc_bridge_db: str | None = os.getenv("ARC_BRIDGE_DB") or None
+
     # ── Vertex AI / Gemini ───────────────────────────────────────────
     vertex_ai_location: str = os.getenv("VERTEX_AI_LOCATION", "asia-southeast1")
     gemini_pro_model: str = os.getenv("GEMINI_PRO_MODEL", "gemini-1.5-pro")

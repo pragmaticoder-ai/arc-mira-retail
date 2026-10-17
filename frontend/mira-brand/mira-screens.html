@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIRA Retail — Screen Mockups</title>
+<style>
+:root {
+  --mira: #0a5c44;
+  --mira-dark: #073d2e;
+  --mira-50: #edf7f3;
+  --mira-100: #d0ece2;
+  --mira-200: #a3d9c6;
+  --pulse: #c8891a;
+  --pulse-50: #fef9ec;
+  --pulse-100: #fdf0c8;
+  --nav: #0f172a;
+  --page: #f8fafc;
+  --sidebar: #f1f5f9;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --danger: #dc2626;
+  --danger-50: #fef2f2;
+  --danger-border: #fecaca;
+  --success: #16a34a;
+  --success-50: #f0fdf4;
+  --success-border: #bbf7d0;
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0f172a;
+    --sidebar: #1e293b;
+    --card: #1e293b;
+    --border: #334155;
+    --border-strong: #475569;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --mira-50: #052e22;
+    --mira-100: #073d2e;
+    --pulse-50: #412402;
+    --pulse-100: #633806;
+    --nav: #020617;
+    --danger-50: #450a0a;
+    --success-50: #052e16;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--page);color:var(--text-primary);font-size:13px;line-height:1.5}
+/* Tab navigation */
+.tabs{display:flex;gap:0;border-bottom:0.5px solid var(--border);background:var(--card);position:sticky;top:0;z-index:100;overflow-x:auto}
+.tab{padding:10px 16px;font-size:11px;font-weight:500;color:var(--text-muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:var(--text-primary)}
+.tab.active{color:var(--mira);border-bottom-color:var(--mira)}
+.tab-group{display:flex;align-items:center;gap:0}
+.tab-divider{width:0.5px;height:20px;background:var(--border);margin:0 4px}
+.screen{display:none;min-height:600px}
+.screen.active{display:block}
+/* Section label */
+.screen-label{font-size:10px;font-weight:600;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;padding:8px 16px;background:var(--sidebar);border-bottom:0.5px solid var(--border)}
+/* Logo SVG inline */
+.logo-mark{display:inline-flex;align-items:center;gap:7px}
+.logo-text{font-size:16px;font-weight:600;color:#fff;letter-spacing:-0.02em}
+.logo-text span{color:var(--pulse)}
+/* Nav */
+.nav{background:var(--nav);height:48px;display:flex;align-items:center;padding:0 16px;gap:16px;justify-content:space-between}
+.nav-left{display:flex;align-items:center;gap:20px}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-link{font-size:12px;color:#64748b;cursor:pointer}
+.nav-link.active{color:#fff}
+.search-box{background:#1e293b;border:0.5px solid #334155;border-radius:var(--radius);padding:5px 10px;color:#64748b;font-size:11px;width:160px;display:flex;align-items:center;gap:6px}
+.cart-btn{background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:5px 12px;font-size:11px;font-weight:500;cursor:pointer}
+.avatar{width:26px;height:26px;border-radius:50%;background:#334155;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:10px;font-weight:500}
+/* Sidebar */
+.sidebar{background:var(--sidebar);border-right:0.5px solid var(--border);padding:12px 8px;width:160px;flex-shrink:0}
+.sidebar-section{font-size:9px;font-weight:600;color:var(--text-muted);letter-spacing:.08em;margin:10px 0 4px;padding:0 6px}
+.cat-item{padding:5px 8px;border-radius:var(--radius);font-size:11px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:1px}
+.cat-item:hover{background:var(--mira-100);color:var(--mira)}
+.cat-item.active{background:var(--mira-50);color:var(--mira);font-weight:500}
+.filter-toggle{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;font-size:11px;color:var(--text-secondary)}
+.toggle{width:28px;height:15px;background:var(--mira);border-radius:999px;position:relative}
+.toggle-dot{width:11px;height:11px;background:#fff;border-radius:50%;position:absolute;top:2px;right:2px}
+/* Product grid */
+.product-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px}
+.product-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:10px;cursor:pointer;transition:border-color .15s}
+.product-card:hover{border-color:var(--mira-200)}
+.product-card.added{border-color:var(--mira-200);background:var(--mira-50)}
+.product-img{height:48px;background:var(--mira-50);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:6px}
+.product-name{font-size:10px;font-weight:500;color:var(--text-primary);line-height:1.3;margin-bottom:3px}
+.product-price{font-size:11px;font-weight:600;color:var(--mira)}
+.product-badge{font-size:9px;background:var(--pulse-50);color:#92400e;border:0.5px solid var(--pulse-100);border-radius:999px;padding:1px 5px;display:inline-block;margin-bottom:3px}
+.add-btn{width:100%;background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:4px;font-size:10px;font-weight:500;margin-top:5px;cursor:pointer}
+.add-btn.added{background:var(--mira-dark)}
+/* ARIA panel */
+.aria-panel{width:280px;flex-shrink:0;border-left:0.5px solid var(--border);display:flex;flex-direction:column;background:var(--card)}
+.aria-head{background:var(--mira);padding:10px 12px}
+.aria-head-title{font-size:12px;font-weight:600;color:#fff}
+.aria-head-sub{font-size:9px;color:rgba(255,255,255,0.6);margin-top:1px}
+.chat-area{flex:1;padding:10px;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.bubble-ai{background:var(--mira-50);border:0.5px solid var(--mira-100);border-radius:0 8px 8px 8px;padding:8px 10px;font-size:10px;color:#073d2e;max-width:88%;line-height:1.5}
+.bubble-user{background:var(--mira);border-radius:8px 0 8px 8px;padding:8px 10px;font-size:10px;color:#fff;max-width:88%;align-self:flex-end;line-height:1.5}
+.thinking{background:var(--pulse-50);border:0.5px solid #fde68a;border-radius:6px;padding:5px 8px;font-size:10px;color:#92400e;display:flex;align-items:center;gap:5px}
+.reasoning{background:var(--sidebar);border-radius:6px;padding:6px 8px;margin-top:2px}
+.r-step{font-size:9px;padding:3px 6px;border-radius:0 3px 3px 0;margin-bottom:2px;line-height:1.4}
+.r-thought{border-left:2px solid var(--mira);background:var(--mira-50);color:#073d2e}
+.r-action{border-left:2px solid var(--pulse);background:var(--pulse-50);color:#92400e}
+.r-observe{border-left:2px solid var(--border-strong);background:var(--sidebar);color:var(--text-muted)}
+.cart-mini{background:var(--mira-50);border-top:0.5px solid var(--mira-100);padding:8px 10px}
+.cart-mini-title{font-size:10px;font-weight:600;color:var(--mira);margin-bottom:5px}
+.cart-row{display:flex;justify-content:space-between;font-size:9px;color:#073d2e;padding:1px 0}
+.cart-total{border-top:0.5px solid var(--mira-100);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:var(--mira-dark)}
+.aria-input-row{padding:8px 10px;border-top:0.5px solid var(--border);display:flex;gap:6px}
+.aria-input{flex:1;background:var(--sidebar);border:0.5px solid var(--border);border-radius:var(--radius);padding:5px 8px;font-size:10px;color:var(--text-primary)}
+.send-btn{background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:5px 10px;font-size:10px;cursor:pointer}
+/* Layout helpers */
+.app-body{display:flex;height:calc(100% - 48px)}
+.main-area{flex:1;overflow:hidden}
+.main-header{padding:10px 12px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.main-title{font-size:13px;font-weight:600;color:var(--text-primary)}
+.main-sub{font-size:10px;color:var(--text-muted)}
+/* PULSE components */
+.pulse-page{background:var(--sidebar);min-height:600px}
+.pulse-layout{display:grid;grid-template-columns:200px 1fr;min-height:552px}
+.pulse-sidebar{background:var(--sidebar);border-right:0.5px solid var(--border);padding:12px 10px}
+.pulse-main{padding:14px;display:flex;flex-direction:column;gap:10px}
+.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.metric-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px}
+.metric-label{font-size:10px;color:var(--text-muted);margin-bottom:4px}
+.metric-value{font-size:24px;font-weight:600;color:var(--text-primary);line-height:1}
+.metric-delta{font-size:10px;margin-top:3px}
+.metric-delta.up{color:var(--danger)}
+.metric-delta.down{color:var(--success)}
+.alert-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.alert-header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between}
+.alert-title{font-size:12px;font-weight:600;color:var(--text-primary)}
+.alert-sub{font-size:10px;color:var(--text-muted);margin-top:1px}
+.alert-body{padding:10px 14px}
+.alert-footer{padding:8px 14px;border-top:0.5px solid var(--border);display:flex;gap:8px;align-items:center}
+.alert-card.stockout{border-left:3px solid var(--danger)}
+.alert-card.perishable{border-left:3px solid var(--pulse)}
+.alert-card.approved{border-left:3px solid var(--success)}
+.evidence-box{background:var(--sidebar);border-radius:var(--radius);padding:6px 8px;font-size:9px;color:var(--text-muted);margin-top:6px;line-height:1.6}
+.approve-btn{background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:5px 14px;font-size:11px;font-weight:500;cursor:pointer}
+.reject-btn{background:var(--card);color:var(--danger);border:0.5px solid var(--danger-border);border-radius:var(--radius);padding:5px 14px;font-size:11px;cursor:pointer}
+/* Login screens */
+.login-page{display:flex;align-items:center;justify-content:center;min-height:600px;background:var(--page)}
+.login-card{background:var(--card);border:0.5px solid var(--border);border-radius:14px;padding:32px 28px;width:320px}
+.login-logo{margin-bottom:20px;text-align:center}
+.login-title{font-size:17px;font-weight:600;color:var(--text-primary);margin-bottom:4px;text-align:center}
+.login-sub{font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:20px}
+.form-group{margin-bottom:12px}
+.form-label{font-size:11px;font-weight:500;color:var(--text-secondary);margin-bottom:4px;display:block}
+.form-input{width:100%;background:var(--sidebar);border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:12px;color:var(--text-primary)}
+.form-input:focus{border-color:var(--mira-200);outline:none;box-shadow:0 0 0 3px rgba(10,92,68,.15)}
+.login-btn{width:100%;background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:9px;font-size:13px;font-weight:500;cursor:pointer;margin-top:4px}
+.login-hint{font-size:10px;color:var(--text-muted);text-align:center;margin-top:14px}
+.login-badge{display:inline-flex;align-items:center;gap:5px;background:var(--mira-50);color:var(--mira);border:0.5px solid var(--mira-200);border-radius:999px;padding:3px 10px;font-size:10px;font-weight:500;margin-bottom:16px}
+/* Pill badges */
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:500}
+.pill-halal{background:var(--mira-50);color:#073d2e;border:0.5px solid var(--mira-200)}
+.pill-expiry{background:var(--pulse-50);color:#92400e;border:0.5px solid #fde68a}
+.pill-stockout{background:var(--danger-50);color:#991b1b;border:0.5px solid var(--danger-border)}
+.pill-success{background:var(--success-50);color:#15803d;border:0.5px solid var(--success-border)}
+.pill-pulse{background:var(--pulse);color:#fff}
+.pill-mira{background:var(--mira);color:#fff}
+/* Order confirmed */
+.confirmed-page{display:flex;align-items:center;justify-content:center;min-height:560px;background:var(--page)}
+.confirmed-card{background:var(--card);border:0.5px solid var(--border);border-radius:14px;padding:32px;width:380px;text-align:center}
+.confirmed-icon{width:56px;height:56px;background:var(--success-50);border:0.5px solid var(--success-border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px}
+/* Divider */
+hr{border:none;border-top:0.5px solid var(--border);margin:10px 0}
+</style>
+</head>
+<body>
+
+<!-- TAB NAV -->
+<div class="tabs">
+  <div style="padding:8px 12px;font-size:10px;font-weight:600;color:var(--mira);letter-spacing:.06em;display:flex;align-items:center">ARIA APP</div>
+  <div class="tab active" onclick="show('aria-login')">Login</div>
+  <div class="tab" onclick="show('aria-store')">Store</div>
+  <div class="tab" onclick="show('aria-chat')">ARIA in action</div>
+  <div class="tab" onclick="show('aria-order')">Order confirmed</div>
+  <div class="tab-divider"></div>
+  <div style="padding:8px 12px;font-size:10px;font-weight:600;color:var(--pulse);letter-spacing:.06em;display:flex;align-items:center">PULSE DASHBOARD</div>
+  <div class="tab" onclick="show('pulse-login')">Login</div>
+  <div class="tab" onclick="show('pulse-dash')">Dashboard</div>
+  <div class="tab" onclick="show('pulse-alert')">Alert detail</div>
+  <div class="tab" onclick="show('pulse-perishable')">Perishable</div>
+</div>
+
+<!-- LOGO SVG macro -->
+<svg style="display:none">
+  <symbol id="sprout" viewBox="0 0 38 38">
+    <line x1="19" y1="34" x2="19" y2="17" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z"/>
+    <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" opacity=".55"/>
+    <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </symbol>
+</svg>
+
+<!-- ═══════════════════════════════════════
+     ARIA: LOGIN
+════════════════════════════════════════ -->
+<div class="screen active" id="aria-login">
+  <div class="screen-label">ARIA App — Login / Welcome</div>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-logo">
+        <div style="display:inline-flex;align-items:center;gap:8px;justify-content:center">
+          <svg width="32" height="32" viewBox="0 0 38 38" fill="none">
+            <line x1="19" y1="34" x2="19" y2="17" stroke="#0a5c44" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#0a5c44"/>
+            <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#0a5c44" opacity=".55"/>
+            <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span style="font-size:20px;font-weight:600;color:#0a5c44;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+        </div>
+        <div style="font-size:9px;color:var(--text-muted);letter-spacing:.1em;text-align:center;margin-top:3px">AI-NATIVE GROCERY</div>
+      </div>
+      <div class="login-badge">
+        <span style="font-size:10px">✦</span> ARIA grocery assistant active
+      </div>
+      <div class="login-title">Welcome back</div>
+      <div class="login-sub">Sign in to your MIRA Retail account</div>
+      <div class="form-group">
+        <label class="form-label">Email address</label>
+        <input class="form-input" value="sarah.al@gmail.com" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" value="••••••••" readonly>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary)">
+          <div style="width:14px;height:14px;background:var(--mira);border-radius:3px;display:flex;align-items:center;justify-content:center">
+            <span style="color:#fff;font-size:9px">✓</span>
+          </div>
+          Remember me
+        </div>
+        <span style="font-size:11px;color:var(--mira);cursor:pointer">Forgot password?</span>
+      </div>
+      <button class="login-btn">Sign in</button>
+      <div class="login-hint">Don't have an account? <span style="color:var(--mira);cursor:pointer">Register</span></div>
+      <hr style="margin:16px 0">
+      <div style="text-align:center;font-size:10px;color:var(--text-muted)">
+        Protected by MIRA Retail · UAE data privacy compliant
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ARIA: STORE (main page)
+════════════════════════════════════════ -->
+<div class="screen" id="aria-store">
+  <div class="screen-label">ARIA App — Main Store · Browse mode (ARIA minimised)</div>
+  <div class="nav">
+    <div class="nav-left">
+      <div style="display:flex;align-items:center;gap:7px">
+        <svg width="22" height="22" viewBox="0 0 38 38" fill="none">
+          <line x1="19" y1="34" x2="19" y2="17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#fff"/>
+          <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#fff" opacity=".5"/>
+          <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+      </div>
+      <span class="nav-link active">Grocery</span>
+      <span class="nav-link">Offers</span>
+      <span class="nav-link">Orders</span>
+    </div>
+    <div class="nav-right">
+      <div class="search-box">🔍 Search groceries…</div>
+      <div style="font-size:10px;color:#94a3b8">Dubai Marina</div>
+      <div class="cart-btn">🛒 Cart · 0</div>
+      <div class="avatar">SA</div>
+    </div>
+  </div>
+  <div class="app-body">
+    <div class="sidebar">
+      <div class="sidebar-section">Categories</div>
+      <div class="cat-item active">🥛 Dairy</div>
+      <div class="cat-item">🌾 Grains</div>
+      <div class="cat-item">🍗 Halal meat</div>
+      <div class="cat-item">🥦 Vegetables</div>
+      <div class="cat-item">🍎 Fruits</div>
+      <div class="cat-item">🧃 Beverages</div>
+      <div class="cat-item">🍪 Snacks</div>
+      <div class="cat-item">🫙 Condiments</div>
+      <div class="sidebar-section">Filters</div>
+      <div class="filter-toggle">
+        <span style="font-size:11px;color:var(--text-secondary)">Halal only</span>
+        <div class="toggle"><div class="toggle-dot"></div></div>
+      </div>
+      <div style="padding:6px 8px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Budget (AED)</div>
+        <input type="range" style="width:100%" value="300">
+        <div style="font-size:10px;color:var(--mira);text-align:right">AED 300</div>
+      </div>
+      <div class="sidebar-section">Store</div>
+      <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:4px 8px;font-size:10px;color:var(--text-primary)">Dubai Marina ▾</div>
+    </div>
+    <div class="main-area">
+      <div class="main-header">
+        <div>
+          <div class="main-title">Dairy products</div>
+          <div class="main-sub">14 products · Dubai Marina in stock</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="pill pill-halal">Halal ✓</span>
+          <span style="font-size:11px;color:var(--text-muted)">Sort: Price ▾</span>
+        </div>
+      </div>
+      <div class="product-grid">
+        <div class="product-card">
+          <div class="product-img">🥛</div>
+          <div class="product-name">Almarai Full Fat Milk 2L</div>
+          <div class="product-price">AED 12.00</div>
+          <button class="add-btn">+ Add to cart</button>
+        </div>
+        <div class="product-card added">
+          <div class="product-img">🫙</div>
+          <div class="product-badge">25% off · exp tomorrow</div>
+          <div class="product-name">Almarai Laban 1L</div>
+          <div class="product-price">AED 6.00 <span style="text-decoration:line-through;color:var(--text-muted);font-size:9px">8.00</span></div>
+          <button class="add-btn added">✓ Added</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">🧀</div>
+          <div class="product-name">Kraft Cheddar Slices 400g</div>
+          <div class="product-price">AED 18.50</div>
+          <button class="add-btn">+ Add to cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">🍦</div>
+          <div class="product-name">Almarai Yoghurt Plain 400g</div>
+          <div class="product-price">AED 6.50</div>
+          <button class="add-btn">+ Add to cart</button>
+        </div>
+        <div class="product-card" style="border-color:#fecaca;background:var(--danger-50)">
+          <div class="product-img">🥚</div>
+          <span class="pill pill-stockout" style="margin-bottom:3px;display:inline-flex">Out of stock</span>
+          <div class="product-name">Farm Fresh Eggs 12pc</div>
+          <div class="product-price" style="color:var(--text-muted)">AED 14.00</div>
+          <button class="add-btn" style="background:#cbd5e1;cursor:not-allowed">Unavailable</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">🧈</div>
+          <div class="product-name">Lurpak Butter Unsalted 200g</div>
+          <div class="product-price">AED 22.00</div>
+          <button class="add-btn">+ Add to cart</button>
+        </div>
+      </div>
+    </div>
+    <!-- ARIA minimised tab -->
+    <div style="width:44px;background:var(--mira);display:flex;flex-direction:column;align-items:center;padding-top:12px;gap:6px;cursor:pointer;border-left:0.5px solid var(--mira-dark)" title="Open ARIA">
+      <svg width="20" height="20" viewBox="0 0 38 38" fill="none">
+        <line x1="19" y1="34" x2="19" y2="17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#fff"/>
+        <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#fff" opacity=".5"/>
+        <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span style="color:#fff;font-size:9px;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.05em;font-weight:500">ARIA</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ARIA: CHAT IN ACTION
+════════════════════════════════════════ -->
+<div class="screen" id="aria-chat">
+  <div class="screen-label">ARIA App — ARIA panel open · Reasoning chain visible</div>
+  <div class="nav">
+    <div class="nav-left">
+      <div style="display:flex;align-items:center;gap:7px">
+        <svg width="22" height="22" viewBox="0 0 38 38" fill="none">
+          <line x1="19" y1="34" x2="19" y2="17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#fff"/>
+          <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#fff" opacity=".5"/>
+          <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="search-box">🔍 Search groceries…</div>
+      <div class="cart-btn">🛒 Cart · 3</div>
+      <div class="avatar">SA</div>
+    </div>
+  </div>
+  <div class="app-body">
+    <div class="sidebar">
+      <div class="sidebar-section">Categories</div>
+      <div class="cat-item active">🥛 Dairy</div>
+      <div class="cat-item">🌾 Grains</div>
+      <div class="cat-item">🍗 Halal meat</div>
+      <div class="cat-item">🥦 Vegetables</div>
+      <div class="cat-item">🍎 Fruits</div>
+      <div class="cat-item">🧃 Beverages</div>
+      <div class="cat-item">🍪 Snacks</div>
+    </div>
+    <div class="main-area">
+      <div class="main-header">
+        <div>
+          <div class="main-title">Your cart — building in progress</div>
+          <div class="main-sub">ARIA is building your halal weekly shop · AED 287 / 300</div>
+        </div>
+        <div style="background:var(--mira-50);border:0.5px solid var(--mira-200);border-radius:6px;padding:4px 10px;font-size:10px;color:var(--mira)">✦ ARIA active</div>
+      </div>
+      <div class="product-grid">
+        <div class="product-card added">
+          <div class="product-img">🥛</div>
+          <div class="product-name">Almarai Full Fat Milk 2L</div>
+          <div class="product-price">AED 12.00</div>
+          <button class="add-btn added">✓ Added by ARIA</button>
+        </div>
+        <div class="product-card added">
+          <div class="product-img">🌾</div>
+          <div class="product-name">Basmati Rice 2kg (subst.)</div>
+          <div class="product-price">AED 18.00</div>
+          <button class="add-btn added">✓ Substituted</button>
+        </div>
+        <div class="product-card added">
+          <div class="product-img">🍗</div>
+          <div class="product-name">Halal Chicken Breast 1kg</div>
+          <div class="product-price">AED 34.00</div>
+          <button class="add-btn added">✓ Added by ARIA</button>
+        </div>
+        <div class="product-card" style="border-style:dashed;border-color:var(--mira-200)">
+          <div class="product-img" style="background:var(--sidebar)">⏳</div>
+          <div class="product-name" style="color:var(--text-muted)">Checking stock…</div>
+          <div class="product-price" style="color:var(--text-muted)">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="aria-panel">
+      <div class="aria-head">
+        <div class="aria-head-title">ARIA — grocery assistant</div>
+        <div class="aria-head-sub">Session active · Dubai Marina</div>
+      </div>
+      <div class="chat-area">
+        <div class="bubble-ai">Hi Sarah! I see you're shopping for the week. Tell me your goal and budget.</div>
+        <div class="bubble-user">Weekly groceries, family of 4, halal, under AED 300</div>
+        <div class="bubble-ai">Got it — building your halal cart for a family of 4, AED 300 budget. Let me check everything in stock…</div>
+        <div class="reasoning" style="font-size:9px">
+          <div style="font-size:9px;font-weight:500;color:var(--text-muted);margin-bottom:4px">↓ How ARIA decided this</div>
+          <div class="r-step r-thought">THOUGHT: Parse intent → halal, family 4, budget AED 300</div>
+          <div class="r-step r-action">ACTION: get_customer_context(sarah_123)</div>
+          <div class="r-step r-observe">OBSERVATION: profile loaded, preferred store Dubai Marina</div>
+          <div class="r-step r-action">ACTION: build_cart(halal, 4, 300, dubai_marina)</div>
+          <div class="r-step r-observe">OBSERVATION: 12 items, AED 334, brown rice unavailable</div>
+          <div class="r-step r-thought">THOUGHT: Over budget. Brown rice unavailable → substitute</div>
+          <div class="r-step r-action">ACTION: suggest_substitution(brown_rice)</div>
+          <div class="r-step r-observe">OBSERVATION: Basmati rice suggested, AED 18, in stock</div>
+          <div class="r-step r-action">ACTION: optimize_budget(cart, 300)</div>
+          <div class="r-step r-observe">OBSERVATION: AED 287, within budget ✓</div>
+        </div>
+        <div class="bubble-ai">Done! Brown rice was unavailable — I've substituted Basmati (same price). Cart is AED 287, under your AED 300 budget. Also — Almarai Laban is 25% off today (best before tomorrow). Want to add it? <span style="color:var(--pulse);font-weight:500">AED 6.00</span></div>
+        <div class="thinking">⟳ Waiting for your confirmation…</div>
+      </div>
+      <div class="cart-mini">
+        <div class="cart-mini-title">Cart — AED 287</div>
+        <div class="cart-row"><span>Almarai Milk 2L</span><span>AED 12</span></div>
+        <div class="cart-row"><span>Basmati Rice 2kg</span><span>AED 18</span></div>
+        <div class="cart-row"><span>Halal Chicken 1kg</span><span>AED 34</span></div>
+        <div class="cart-row" style="color:var(--text-muted)"><span>+ 9 more items</span><span>AED 223</span></div>
+        <div class="cart-total"><span>Total</span><span>AED 287</span></div>
+      </div>
+      <div class="aria-input-row">
+        <input class="aria-input" placeholder="Reply to ARIA…">
+        <button class="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ARIA: ORDER CONFIRMED
+════════════════════════════════════════ -->
+<div class="screen" id="aria-order">
+  <div class="screen-label">ARIA App — Order confirmed</div>
+  <div class="nav">
+    <div class="nav-left">
+      <div style="display:flex;align-items:center;gap:7px">
+        <svg width="22" height="22" viewBox="0 0 38 38" fill="none">
+          <line x1="19" y1="34" x2="19" y2="17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#fff"/>
+          <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#fff" opacity=".5"/>
+          <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="cart-btn" style="background:#1e293b">🛒 Cart · 0</div>
+      <div class="avatar">SA</div>
+    </div>
+  </div>
+  <div class="confirmed-page">
+    <div class="confirmed-card">
+      <div class="confirmed-icon">✓</div>
+      <div style="font-size:17px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Order confirmed</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px">Order #MR-2026-4821 · Dubai Marina</div>
+      <div style="background:var(--mira-50);border:0.5px solid var(--mira-200);border-radius:var(--radius-lg);padding:14px;text-align:left;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;color:var(--mira);margin-bottom:8px">Order summary</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:3px"><span>12 items</span><span>AED 287.00</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#c8891a;margin-bottom:3px"><span>Laban discount (25%)</span><span>−AED 2.00</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:8px"><span>Delivery</span><span>Free</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--text-primary);border-top:0.5px solid var(--mira-200);padding-top:8px"><span>Total paid</span><span>AED 285.00</span></div>
+      </div>
+      <div style="background:var(--sidebar);border-radius:var(--radius-lg);padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="font-size:24px">🚚</div>
+        <div>
+          <div style="font-size:12px;font-weight:500;color:var(--text-primary)">Delivery tomorrow</div>
+          <div style="font-size:10px;color:var(--text-muted)">Sat 18 Oct · 10:00–12:00 AM · Dubai Marina</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:14px">ARIA logged this session. If anything was unavailable, PULSE will flag it to your store manager.</div>
+      <button class="login-btn">Continue shopping</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     PULSE: LOGIN
+════════════════════════════════════════ -->
+<div class="screen" id="pulse-login">
+  <div class="screen-label">PULSE Dashboard — Manager login</div>
+  <div class="login-page" style="background:#0f172a">
+    <div class="login-card">
+      <div class="login-logo">
+        <div style="display:inline-flex;align-items:center;gap:8px;justify-content:center">
+          <svg width="32" height="32" viewBox="0 0 38 38" fill="none">
+            <line x1="19" y1="34" x2="19" y2="17" stroke="#0a5c44" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#0a5c44"/>
+            <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#0a5c44" opacity=".55"/>
+            <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <span style="font-size:20px;font-weight:600;color:#0a5c44;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+        </div>
+        <div style="font-size:9px;color:var(--text-muted);letter-spacing:.1em;text-align:center;margin-top:3px">OPERATIONS DASHBOARD</div>
+      </div>
+      <div class="login-badge" style="background:#fef9ec;color:#92400e;border-color:#fde68a">
+        <span style="color:#c8891a">✦</span> PULSE agent active · 3 alerts pending
+      </div>
+      <div class="login-title">Manager access</div>
+      <div class="login-sub">Sign in to view store intelligence</div>
+      <div class="form-group">
+        <label class="form-label">Manager ID</label>
+        <input class="form-input" value="ahmed.al@mira.ae" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" value="••••••••" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Store</label>
+        <div class="form-input" style="color:var(--text-primary)">Dubai Marina ▾</div>
+      </div>
+      <button class="login-btn">Access dashboard</button>
+      <div class="login-hint">Operations access only · Unauthorised access is monitored</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     PULSE: MAIN DASHBOARD
+════════════════════════════════════════ -->
+<div class="screen" id="pulse-dash">
+  <div class="screen-label">PULSE Dashboard — Main view · Auto-refreshes every 10s</div>
+  <div class="pulse-page">
+    <div style="background:var(--nav);padding:0 16px;height:44px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg width="20" height="20" viewBox="0 0 38 38" fill="none">
+          <line x1="19" y1="34" x2="19" y2="17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M19 21 C19 21 10 19 8 12 C12 9 19 14 19 21Z" fill="#fff"/>
+          <path d="M19 21 C19 21 28 19 30 12 C26 9 19 14 19 21Z" fill="#fff" opacity=".5"/>
+          <path d="M5 27 L8 27 L10 23 L12 31 L14.5 25 L17 27 L19 27 L21 27 L23.5 23 L26 31 L28 25 L30 27 L33 27" stroke="#c8891a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span style="font-size:14px;font-weight:600;color:#fff;letter-spacing:-0.02em">MIRA<span style="color:#c8891a">Retail</span></span>
+        <span style="font-size:10px;color:#475569;margin-left:4px">/ PULSE Operations</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="pill pill-pulse">● Live</span>
+        <span style="font-size:10px;color:#475569">Last refresh: 12s ago</span>
+        <div class="avatar">AM</div>
+      </div>
+    </div>
+    <div class="pulse-layout">
+      <div class="pulse-sidebar">
+        <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:10px">Dubai Marina</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Store</div>
+        <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:5px 8px;font-size:11px;color:var(--text-primary);margin-bottom:10px">Dubai Marina ▾</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Period</div>
+        <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:5px 8px;font-size:11px;color:var(--text-primary);margin-bottom:14px">Last 48 hours ▾</div>
+        <button style="width:100%;background:var(--mira);color:#fff;border:none;border-radius:var(--radius);padding:6px;font-size:11px;font-weight:500;cursor:pointer;margin-bottom:10px">↻ Refresh now</button>
+        <div style="font-size:10px;color:var(--text-muted);text-align:center">Updated 12s ago</div>
+        <hr style="margin:14px 0">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">Alerts</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:var(--danger)">Stockouts</span><span style="font-weight:600">2</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:var(--pulse)">Perishable</span><span style="font-weight:600">1</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--text-muted)">POs pending</span><span style="font-weight:600">2</span></div>
+      </div>
+      <div class="pulse-main">
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-label">Incidents (48h)</div>
+            <div class="metric-value">31</div>
+            <div class="metric-delta up">↑ 12 vs yesterday</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Revenue at risk</div>
+            <div class="metric-value" style="color:var(--danger)">AED 1,847</div>
+            <div class="metric-delta up">↑ AED 423 vs yesterday</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">POs pending</div>
+            <div class="metric-value" style="color:var(--pulse)">2</div>
+            <div class="metric-delta" style="color:var(--text-muted)">Awaiting your approval</div>
+          </div>
+        </div>
+        <div class="alert-card stockout">
+          <div class="alert-header">
+            <div>
+              <div class="alert-title">🔴 Brown Rice 500g — Dubai Marina</div>
+              <div class="alert-sub">23 incidents · 48 hours · 5 cart abandonments</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:14px;font-weight:600;color:var(--danger)">AED 847</div>
+              <div style="font-size:9px;color:var(--text-muted)">revenue lost</div>
+            </div>
+          </div>
+          <div class="alert-body">
+            <div style="font-size:11px;color:var(--text-primary);margin-bottom:4px"><strong>Root cause</strong> — Delivery timing mismatch <span class="pill pill-success" style="font-size:9px;margin-left:4px">High confidence</span></div>
+            <div style="font-size:10px;color:var(--text-secondary)">Delivery arrives Tuesday 14:00 · demand peaks Mon–Wed 10:00–12:00 · 4-hour supply gap</div>
+            <div class="evidence-box">Evidence: BigQuery incidents (23 rows, Oct 14–16) · AlloyDB replenishment_schedule (store=dubai_marina_01)</div>
+          </div>
+          <div class="alert-footer">
+            <button class="approve-btn">✅ Approve PO</button>
+            <button class="reject-btn">❌ Reject</button>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto">AED 3,200 recoverable/month</span>
+          </div>
+        </div>
+        <div class="alert-card perishable">
+          <div class="alert-header">
+            <div>
+              <div class="alert-title">🟡 Almarai Laban 1L — Dubai Marina</div>
+              <div class="alert-sub">48 units · expiring in 2 days · selling 8.5 units/day</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:14px;font-weight:600;color:var(--pulse)">AED 248</div>
+              <div style="font-size:9px;color:var(--text-muted)">at risk of waste</div>
+            </div>
+          </div>
+          <div class="alert-body">
+            <div style="font-size:11px;color:var(--text-primary);margin-bottom:4px"><strong>Trigger</strong> — 48 units · need 24/day to clear · only selling 8.5/day</div>
+            <div style="font-size:10px;color:var(--text-secondary)">31 units will expire unsold at current velocity · 25% discount recommended → AED 6.00</div>
+            <div class="evidence-box">Evidence: inventory.expiry_date=Oct 19 · BigQuery incidents (7-day velocity: 8.5 units/day)</div>
+          </div>
+          <div class="alert-footer">
+            <button class="approve-btn" style="background:var(--pulse)">✅ Approve 25% discount</button>
+            <button class="reject-btn">❌ Reject</button>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto">AED 186 recoverable</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     PULSE: ALERT DETAIL
+════════════════════════════════════════ -->
+<div class="screen" id="pulse-alert">
+  <div class="screen-label">PULSE Dashboard — Stockout alert detail · Full root cause + evidence</div>
+  <div class="pulse-page" style="padding:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="font-size:11px;color:var(--mira);cursor:pointer">← Back to dashboard</span>
+      <span style="color:var(--border-strong)">·</span>
+      <span style="font-size:11px;color:var(--text-muted)">Alert detail</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="alert-card stockout" style="border-left-width:4px">
+          <div class="alert-header">
+            <div>
+              <div class="alert-title" style="font-size:14px">🔴 Brown Rice 500g — Dubai Marina</div>
+              <div class="alert-sub">Detected Oct 16, 09:32 AM · PULSE confidence: High</div>
+            </div>
+            <span class="pill pill-stockout">Critical</span>
+          </div>
+          <div class="alert-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div style="background:var(--danger-50);border-radius:var(--radius);padding:8px 10px">
+                <div style="font-size:9px;color:#991b1b;margin-bottom:2px">Revenue lost</div>
+                <div style="font-size:16px;font-weight:600;color:var(--danger)">AED 847</div>
+              </div>
+              <div style="background:var(--danger-50);border-radius:var(--radius);padding:8px 10px">
+                <div style="font-size:9px;color:#991b1b;margin-bottom:2px">At risk (7 days)</div>
+                <div style="font-size:16px;font-weight:600;color:var(--danger)">AED 2,961</div>
+              </div>
+              <div style="background:var(--success-50);border-radius:var(--radius);padding:8px 10px">
+                <div style="font-size:9px;color:#15803d;margin-bottom:2px">Recoverable</div>
+                <div style="font-size:16px;font-weight:600;color:var(--success)">AED 3,200/mo</div>
+              </div>
+            </div>
+            <div style="font-size:12px;font-weight:500;color:var(--text-primary);margin-bottom:6px">Root cause analysis</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;line-height:1.7">Delivery arrives <strong>Tuesday 14:00</strong> but customer demand peaks <strong>Monday–Wednesday 10:00–12:00</strong>. This creates a 4-hour supply gap at peak demand time. At current incident rate, this pattern will repeat every week.</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text-primary);margin-bottom:6px">Evidence</div>
+            <div class="evidence-box" style="font-size:10px">
+              <div style="margin-bottom:3px">📊 BigQuery incidents table · 23 rows · Oct 14–16 2026 · store=dubai_marina_01</div>
+              <div style="margin-bottom:3px">🗄 AlloyDB replenishment_schedule · delivery_day=Tuesday · delivery_time=14:00</div>
+              <div style="margin-bottom:3px">📈 Demand peak identified: Mon–Wed 10:00–12:00 (from incident timestamps)</div>
+              <div>🔢 Formula: incident_count=23 × avg_cart_aed=220 × abandonment_rate=0.22 × margin=0.15 = AED 847</div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-card">
+          <div class="alert-header"><div class="alert-title">Recommended purchase order</div></div>
+          <div class="alert-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;margin-bottom:10px">
+              <div><span style="color:var(--text-muted)">Product</span><br><strong>Brown Rice 500g</strong></div>
+              <div><span style="color:var(--text-muted)">Quantity</span><br><strong>120 units</strong></div>
+              <div><span style="color:var(--text-muted)">Urgency</span><br><span style="color:var(--danger);font-weight:500">Critical</span></div>
+              <div><span style="color:var(--text-muted)">Supplier</span><br><strong>Al Islami Foods</strong></div>
+            </div>
+            <div style="background:var(--mira-50);border:0.5px solid var(--mira-200);border-radius:var(--radius);padding:8px 10px;font-size:10px;color:#073d2e;margin-bottom:10px">
+              <strong>Justification:</strong> 23 customer incidents in 48 hours. Delivery timing mismatch identified as root cause. Recommend twice-weekly delivery schedule going forward.
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px">⚠ This PO requires your approval. PULSE never auto-approves. You are in control.</div>
+            <div style="display:flex;gap:8px">
+              <button class="approve-btn" style="flex:1;padding:9px">✅ Approve purchase order</button>
+              <button class="reject-btn" style="padding:9px 16px">❌ Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="alert-card">
+          <div class="alert-header"><div class="alert-title">Stockout prediction</div></div>
+          <div class="alert-body">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">BigQuery ML ARIMA_PLUS · 7-day forecast · confidence 87%</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="display:flex;justify-content:space-between;font-size:11px"><span>Next stockout</span><span style="color:var(--danger);font-weight:500">Mon Oct 21</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px"><span>Days until</span><span style="font-weight:500">4 days</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px"><span>Confidence</span><span style="color:var(--success);font-weight:500">87%</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-card">
+          <div class="alert-header"><div class="alert-title">Incident timeline</div></div>
+          <div class="alert-body">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px">23 incidents · Oct 14–16</div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <div style="font-size:10px;color:var(--text-secondary)">Oct 14 Mon · 10:32 AM — cart abandoned</div>
+              <div style="font-size:10px;color:var(--text-secondary)">Oct 14 Mon · 11:14 AM — substituted</div>
+              <div style="font-size:10px;color:var(--text-secondary)">Oct 15 Tue · 10:05 AM — cart abandoned</div>
+              <div style="font-size:10px;color:var(--text-secondary)">Oct 15 Tue · 10:41 AM — substituted</div>
+              <div style="font-size:10px;color:var(--text-muted)">+ 19 more incidents…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     PULSE: PERISHABLE
+════════════════════════════════════════ -->
+<div class="screen" id="pulse-perishable">
+  <div class="screen-label">PULSE Dashboard — Perishable discount intelligence</div>
+  <div class="pulse-page" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary)">Perishable alerts</div>
+        <div style="font-size:10px;color:var(--text-muted)">Items not selling fast enough before expiry · Dubai Marina</div>
+      </div>
+      <span class="pill pill-pulse">1 alert active</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:14px">
+      <div>
+        <div class="alert-card perishable" style="border-left-width:4px;margin-bottom:10px">
+          <div class="alert-header">
+            <div>
+              <div class="alert-title">🟡 Almarai Laban 1L — Dubai Marina</div>
+              <div class="alert-sub">Trigger: selling 8.5/day · need 24/day · expiry in 2 days</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:14px;font-weight:600;color:var(--pulse)">AED 248</div>
+              <div style="font-size:9px;color:var(--text-muted)">waste risk</div>
+            </div>
+          </div>
+          <div class="alert-body">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+              <div style="background:var(--sidebar);border-radius:var(--radius);padding:8px;text-align:center">
+                <div style="font-size:9px;color:var(--text-muted)">In stock</div>
+                <div style="font-size:16px;font-weight:600;color:var(--text-primary)">48</div>
+              </div>
+              <div style="background:var(--sidebar);border-radius:var(--radius);padding:8px;text-align:center">
+                <div style="font-size:9px;color:var(--text-muted)">Days left</div>
+                <div style="font-size:16px;font-weight:600;color:var(--pulse)">2</div>
+              </div>
+              <div style="background:var(--sidebar);border-radius:var(--radius);padding:8px;text-align:center">
+                <div style="font-size:9px;color:var(--text-muted)">Will expire</div>
+                <div style="font-size:16px;font-weight:600;color:var(--danger)">31</div>
+              </div>
+              <div style="background:var(--success-50);border-radius:var(--radius);padding:8px;text-align:center">
+                <div style="font-size:9px;color:#15803d">Recoverable</div>
+                <div style="font-size:16px;font-weight:600;color:var(--success)">AED 186</div>
+              </div>
+            </div>
+            <div style="font-size:12px;font-weight:500;color:var(--text-primary);margin-bottom:6px">Discount recommendation</div>
+            <div style="background:var(--pulse-50);border:0.5px solid #fde68a;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-size:12px;font-weight:600;color:#92400e">25% discount → AED 6.00</span>
+                <span style="font-size:10px;color:#92400e">(was AED 8.00)</span>
+              </div>
+              <div style="font-size:10px;color:#a16207;line-height:1.6">Expected sell-through at discounted price: 43 of 48 units<br>Revenue recovered: AED 186 vs AED 0 if discarded<br>Discount tier: 2 days to expiry → 25%</div>
+            </div>
+            <div class="evidence-box">
+              Evidence: inventory.expiry_date=Oct 19 · inventory.stock_quantity=48<br>
+              BigQuery incidents (7-day sales velocity: 8.5 units/day)<br>
+              Trigger: 2 × 8.5 = 17 units &lt; 48 units in stock → discount triggered
+            </div>
+          </div>
+          <div class="alert-footer">
+            <button class="approve-btn" style="background:var(--pulse)">✅ Approve 25% discount</button>
+            <button class="reject-btn">❌ Reject</button>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto">Once approved, ARIA will surface this to customers</span>
+          </div>
+        </div>
+        <div class="alert-card approved">
+          <div class="alert-header">
+            <div>
+              <div class="alert-title">✅ Almarai Yoghurt 400g — Approved</div>
+              <div class="alert-sub">15% discount active · AED 5.53 · approved 2h ago</div>
+            </div>
+            <span class="pill pill-success">Discount live</span>
+          </div>
+          <div style="padding:10px 14px;font-size:10px;color:var(--text-muted)">ARIA is now surfacing this discount to customers automatically. 8 units sold since approval.</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="alert-card">
+          <div class="alert-header"><div class="alert-title">How discounts reach customers</div></div>
+          <div class="alert-body">
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:10px;color:var(--text-secondary)">
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:20px;height:20px;background:var(--pulse-50);border:0.5px solid #fde68a;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#92400e;font-weight:600">1</div>
+                <span>PULSE detects slow sell-through velocity vs expiry date</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:20px;height:20px;background:var(--pulse-50);border:0.5px solid #fde68a;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#92400e;font-weight:600">2</div>
+                <span>PULSE proposes discount tier + evidence to you</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:20px;height:20px;background:var(--mira-50);border:0.5px solid var(--mira-200);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:var(--mira);font-weight:600">3</div>
+                <span>You approve → discount_active=True in inventory</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:20px;height:20px;background:var(--mira-50);border:0.5px solid var(--mira-200);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:var(--mira);font-weight:600">4</div>
+                <span>ARIA surfaces it naturally: "Laban is 25% off — AED 6.00"</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:20px;height:20px;background:var(--success-50);border:0.5px solid var(--success-border);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:var(--success);font-weight:600">5</div>
+                <span>Waste prevented · Revenue recovered · Loop closed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alert-card">
+          <div class="alert-header"><div class="alert-title">Discount tiers</div></div>
+          <div class="alert-body">
+            <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+              <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">3 days to expiry</span><span style="color:var(--pulse);font-weight:500">15% off</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">2 days to expiry</span><span style="color:var(--pulse);font-weight:500">25% off</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">1 day to expiry</span><span style="color:var(--danger);font-weight:500">40% off</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'))
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  document.getElementById(id).classList.add('active')
+  event.target.classList.add('active')
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+/* ═══════════════════════════════════════════════════════════
+   MIRA Retail — Global CSS
+   Import this in app/layout.tsx
+   ═══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS custom properties (mirrors Tailwind tokens) ────── */
+:root {
+  /* Brand */
+  --mira-primary:     #0a5c44;
+  --mira-primary-dark:#073d2e;
+  --mira-primary-light:#edf7f3;
+  --mira-accent:      #c8891a;
+  --mira-accent-light:#fef9ec;
+
+  /* UI surfaces */
+  --bg-page:          #f8fafc;
+  --bg-sidebar:       #f1f5f9;
+  --bg-card:          #ffffff;
+  --bg-nav:           #0f172a;
+
+  /* Text */
+  --text-primary:     #1e293b;
+  --text-secondary:   #64748b;
+  --text-muted:       #94a3b8;
+  --text-on-primary:  #ffffff;
+
+  /* Borders */
+  --border-default:   #e2e8f0;
+  --border-strong:    #cbd5e1;
+
+  /* Status */
+  --status-success:   #16a34a;
+  --status-warning:   #d97706;
+  --status-danger:    #dc2626;
+  --status-info:      #0284c7;
+
+  /* Perishable alert (amber tint) */
+  --bg-perishable:    #fef9ec;
+  --border-perishable:#fde68a;
+  --text-perishable:  #92400e;
+
+  /* Stockout alert (red tint) */
+  --bg-stockout:      #fef2f2;
+  --border-stockout:  #fecaca;
+  --text-stockout:    #991b1b;
+}
+
+/* ── Base resets ─────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+}
+
+/* ── Component layer ─────────────────────────────────────── */
+@layer components {
+
+  /* Buttons */
+  .btn-primary {
+    @apply bg-mira-600 text-white text-sm font-medium
+           px-4 py-2 rounded-md
+           hover:bg-mira-700
+           focus:outline-none focus:ring-2 focus:ring-mira-600 focus:ring-offset-2
+           transition-colors duration-150;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-mira-600 text-sm font-medium
+           px-4 py-2 rounded-md
+           border border-mira-200
+           hover:bg-mira-50
+           focus:outline-none focus:ring-2 focus:ring-mira-600 focus:ring-offset-2
+           transition-colors duration-150;
+  }
+
+  .btn-accent {
+    @apply bg-amber-500 text-white text-sm font-medium
+           px-4 py-2 rounded-md
+           hover:bg-amber-600
+           focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2
+           transition-colors duration-150;
+  }
+
+  .btn-danger {
+    @apply bg-white text-red-600 text-sm font-medium
+           px-4 py-2 rounded-md
+           border border-red-200
+           hover:bg-red-50
+           transition-colors duration-150;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-white rounded-lg border border-slate-200 p-4;
+  }
+
+  .card-hover {
+    @apply card hover:border-mira-200 hover:shadow-card transition-all duration-150;
+  }
+
+  /* Badges */
+  .badge-success {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full
+           text-xs font-medium
+           bg-green-50 text-green-700 border border-green-200;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full
+           text-xs font-medium
+           bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full
+           text-xs font-medium
+           bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .badge-mira {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full
+           text-xs font-medium
+           bg-mira-50 text-mira-700 border border-mira-200;
+  }
+
+  /* Alert panels */
+  .alert-perishable {
+    @apply rounded-lg border p-4;
+    background: var(--bg-perishable);
+    border-color: var(--border-perishable);
+    color: var(--text-perishable);
+  }
+
+  .alert-stockout {
+    @apply rounded-lg border p-4;
+    background: var(--bg-stockout);
+    border-color: var(--border-stockout);
+    color: var(--text-stockout);
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full px-3 py-2 text-sm
+           bg-white border border-slate-200 rounded-md
+           text-slate-800 placeholder-slate-400
+           focus:outline-none focus:ring-2 focus:ring-mira-600 focus:border-transparent
+           transition-colors duration-150;
+  }
+
+  /* ARIA chat bubbles */
+  .bubble-aria {
+    @apply rounded-tr-lg rounded-br-lg rounded-bl-lg
+           px-4 py-3 text-sm
+           bg-mira-50 border border-mira-100 text-mira-900
+           max-w-[85%];
+  }
+
+  .bubble-user {
+    @apply rounded-tl-lg rounded-bl-lg rounded-br-lg
+           px-4 py-3 text-sm
+           bg-mira-600 text-white
+           max-w-[85%] self-end;
+  }
+
+  /* PULSE alert cards */
+  .pulse-alert-card {
+    @apply rounded-lg border border-slate-200 bg-white overflow-hidden;
+  }
+
+  .pulse-alert-header {
+    @apply flex items-center justify-between
+           px-4 py-3
+           border-b border-slate-100;
+  }
+
+  /* Reasoning chain */
+  .reasoning-step {
+    @apply flex gap-3 text-xs text-slate-500 py-1.5
+           border-l-2 border-slate-200 pl-3;
+  }
+
+  .reasoning-step-thought { @apply border-mira-200 text-mira-700; }
+  .reasoning-step-action  { @apply border-amber-300 text-amber-700; }
+  .reasoning-step-observe { @apply border-slate-300 text-slate-500; }
+}

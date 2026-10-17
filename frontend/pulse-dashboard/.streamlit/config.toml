@@ -1,10 +1,11 @@
 # .streamlit/config.toml
 # MIRA Retail brand theme for PULSE dashboard
 # Place this file at: frontend/pulse-dashboard/.streamlit/config.toml
+# Colors per BRAND.md §10 (PULSE dashboard page background is slate-100 #f1f5f9).
 
 [theme]
-primaryColor       = "#0a5c44"
-backgroundColor    = "#f8fafc"
-secondaryBackgroundColor = "#f1f5f9"
-textColor          = "#1e293b"
-font               = "sans serif"
+primaryColor             = "#0a5c44"
+backgroundColor          = "#f1f5f9"
+secondaryBackgroundColor = "#ffffff"
+textColor                = "#1e293b"
+font                     = "sans serif"

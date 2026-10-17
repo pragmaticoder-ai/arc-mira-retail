@@ -12,6 +12,9 @@ a canned prediction in mock mode (real impl TODO calls BigQuery ML).
 
 from __future__ import annotations
 
+import json
+import sqlite3
+import threading
 import uuid
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -195,12 +198,15 @@ class SqliteBigQueryClient(BigQueryClient):
     only storage differs. Selected when settings.arc_bridge_db is set."""
 
     def __init__(self, db_path: str) -> None:
-        import json
-        import sqlite3
-
-        self._json = json
         self._db_path = db_path
-        self._conn = sqlite3.connect(db_path, isolation_level=None)  # autocommit
+        # Lock first — the seed loop below calls insert_incident, which locks.
+        self._lock = threading.Lock()
+        # check_same_thread=False: Streamlit reruns the script on different
+        # threads and reuses this singleton. Our calls are short, autocommit,
+        # and serialized by self._lock, so cross-thread use is safe here.
+        self._conn = sqlite3.connect(
+            db_path, isolation_level=None, check_same_thread=False
+        )  # autocommit
         self._conn.execute("PRAGMA journal_mode=WAL")  # safe concurrent readers
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS arc_incidents (session_id TEXT PRIMARY KEY, payload TEXT)"
@@ -215,17 +221,20 @@ class SqliteBigQueryClient(BigQueryClient):
                 self.insert_incident(row)
 
     def _all_incidents(self) -> list[dict]:
-        cur = self._conn.execute("SELECT payload FROM arc_incidents")
-        return [self._json.loads(r[0]) for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute("SELECT payload FROM arc_incidents")
+            rows = cur.fetchall()
+        return [json.loads(r[0]) for r in rows]
 
     def insert_incident(self, incident: dict) -> dict:
         sid = incident.get("session_id") or str(uuid.uuid4())
         record = {**incident, "session_id": sid}
         # INSERT OR IGNORE = idempotent on session_id (primary key).
-        self._conn.execute(
-            "INSERT OR IGNORE INTO arc_incidents(session_id, payload) VALUES (?, ?)",
-            (sid, self._json.dumps(record)),
-        )
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO arc_incidents(session_id, payload) VALUES (?, ?)",
+                (sid, json.dumps(record)),
+            )
         return {"session_id": sid, "logged": True, "timestamp": datetime.now().isoformat()}
 
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
@@ -238,16 +247,17 @@ class SqliteBigQueryClient(BigQueryClient):
         return _VELOCITIES.get(product_id, 3.0)
 
     def record_substitution_gap(self, *, product_id: str, store_id: str) -> str:
-        cur = self._conn.execute(
-            "SELECT n FROM arc_sub_gaps WHERE product_id=? AND store_id=?", (product_id, store_id)
-        )
-        row = cur.fetchone()
-        n = row[0] if row else 0
-        self._conn.execute(
-            "INSERT INTO arc_sub_gaps(product_id, store_id, n) VALUES (?,?,?) "
-            "ON CONFLICT(product_id, store_id) DO UPDATE SET n=?",
-            (product_id, store_id, n + 1, n + 1),
-        )
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT n FROM arc_sub_gaps WHERE product_id=? AND store_id=?", (product_id, store_id)
+            )
+            row = cur.fetchone()
+            n = row[0] if row else 0
+            self._conn.execute(
+                "INSERT INTO arc_sub_gaps(product_id, store_id, n) VALUES (?,?,?) "
+                "ON CONFLICT(product_id, store_id) DO UPDATE SET n=?",
+                (product_id, store_id, n + 1, n + 1),
+            )
         return "new" if n == 0 else "recurring"
 
 

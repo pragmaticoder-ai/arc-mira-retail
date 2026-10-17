@@ -14,7 +14,6 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import Any
 
 from tools.shared.settings import settings
 
@@ -41,6 +40,9 @@ class AlloyDBClient(ABC):
     @abstractmethod
     def set_discount_active(self, product_id: str, active: bool) -> None: ...
 
+    @abstractmethod
+    def get_replenishment(self, store_id: str, product_id: str) -> dict | None: ...
+
 
 class MockAlloyDBClient(AlloyDBClient):
     def __init__(self) -> None:
@@ -50,6 +52,10 @@ class MockAlloyDBClient(AlloyDBClient):
         self._customers = {c["customer_id"]: dict(c) for c in mock_inventory.MOCK_CUSTOMERS}
         self._inventory = {p["product_id"]: dict(p) for p in mock_inventory.MOCK_INVENTORY}
         self._promotions = [dict(p) for p in mock_inventory.MOCK_PROMOTIONS]
+        self._replenishment = {
+            (r["store_id"], r["product_id"]): dict(r)
+            for r in getattr(mock_inventory, "MOCK_REPLENISHMENT", [])
+        }
         self._orders: dict[str, dict] = {}
         self._purchase_orders: dict[str, dict] = {}
 
@@ -92,6 +98,9 @@ class MockAlloyDBClient(AlloyDBClient):
         if product_id in self._inventory:
             self._inventory[product_id]["discount_active"] = active
 
+    def get_replenishment(self, store_id: str, product_id: str) -> dict | None:
+        return self._replenishment.get((store_id, product_id))
+
 
 class RealAlloyDBClient(AlloyDBClient):
     """TODO(backend): implement with google.cloud.alloydb.connector + pg8000.
@@ -110,6 +119,7 @@ class RealAlloyDBClient(AlloyDBClient):
     def insert_order(self, order: dict) -> dict: ...
     def insert_purchase_order(self, po: dict) -> dict: ...
     def set_discount_active(self, product_id: str, active: bool) -> None: ...
+    def get_replenishment(self, store_id: str, product_id: str) -> dict | None: ...
 
 
 # Single shared instance so in-session mock writes persist across tool calls.

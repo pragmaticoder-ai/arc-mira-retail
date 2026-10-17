@@ -1,11 +1,12 @@
-"""Vector search adapter (AlloyDB AI / ScaNN) — placeholder with mock impl.
+"""Vector search adapter (AlloyDB AI / ScaNN) — real TF-IDF cosine in mock.
 
 suggest_substitution() uses this to find semantically similar in-stock products.
-Tools depend on this interface, not on the AlloyDB ScaNN SQL directly.
+The mock computes cosine similarity over the TF-IDF product space from
+embeddings.py, so results are genuinely semantic (rice→rice/grains). Real impl
+(TODO) runs the ScaNN SQL query in ARCHITECTURE.md §6.
 
-Mock computes cosine similarity in Python against the seed inventory using the
-MockEmbeddings vectors, filtered by dietary + price + stock, mirroring the real
-ScaNN query in ARCHITECTURE.md §6. Real impl (TODO) runs the SQL ScaNN query.
+Caller passes max_price_aed; SPEC-ARIA-05 also wants substitutes within ~20% of
+the original price, which suggest_substitution enforces via max_price_aed.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 
-from tools.shared.embeddings import get_embeddings
+from tools.shared.embeddings import get_embeddings, product_document
 from tools.shared.settings import settings
 
 
@@ -35,6 +36,7 @@ class VectorSearch(ABC):
         store_id: str,
         dietary_preference: str,
         max_price_aed: float,
+        min_price_aed: float = 0.0,
         exclude_product_id: str | None = None,
         limit: int = 1,
     ) -> list[dict]:
@@ -43,7 +45,7 @@ class VectorSearch(ABC):
 
 
 class MockVectorSearch(VectorSearch):
-    """In-process cosine search over the shared mock inventory."""
+    """In-process TF-IDF cosine search over the shared mock inventory."""
 
     def nearest_in_stock(
         self,
@@ -52,6 +54,7 @@ class MockVectorSearch(VectorSearch):
         store_id: str,
         dietary_preference: str,
         max_price_aed: float,
+        min_price_aed: float = 0.0,
         exclude_product_id: str | None = None,
         limit: int = 1,
     ) -> list[dict]:
@@ -70,15 +73,18 @@ class MockVectorSearch(VectorSearch):
                 continue
             if max_price_aed and p["price_aed"] > max_price_aed:
                 continue
+            if p["price_aed"] < min_price_aed:
+                continue
             if dietary_preference and dietary_preference != "none":
                 if dietary_preference not in p["dietary_flags"]:
                     continue
-            sim = _cosine(q, emb.embed(f"{p['product_name']} {p['category']} {p['dietary_flags']}"))
+            sim = _cosine(q, emb.embed(product_document(p)))
             candidates.append(
                 {
                     "product_id": p["product_id"],
                     "product_name": p["product_name"],
                     "price_aed": p["price_aed"],
+                    "category": p["category"],
                     "similarity_score": round(sim, 4),
                 }
             )
@@ -88,8 +94,8 @@ class MockVectorSearch(VectorSearch):
 
 
 class RealVectorSearch(VectorSearch):
-    """TODO(backend): implement the ScaNN cosine query from ARCHITECTURE.md §6
-    against AlloyDB (embedding <=> query_embedding)."""
+    """TODO(backend): ScaNN cosine query from ARCHITECTURE.md §6 against AlloyDB
+    (embedding <=> query_embedding), same dietary/price/stock filters."""
 
     def nearest_in_stock(self, **kwargs) -> list[dict]:
         raise NotImplementedError(

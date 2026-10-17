@@ -7,14 +7,16 @@ no order was placed. Idempotent on session_id.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.bigquery_client import get_bigquery
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("aria.log_session")
 router = APIRouter()
@@ -42,10 +44,21 @@ def log_session(
     bridge between ARIA and PULSE. ALWAYS call this as the absolute last step,
     even if no order was placed. sentiment: positive | neutral | negative.
     """
+    # ── Validation (SPEC-ARIA-09 §4) ─────────────────────────────────
     if not session_id:
         return error("VALIDATION_ERROR", "session_id is required")
+    try:
+        uuid.UUID(str(session_id))
+    except (ValueError, AttributeError, TypeError):
+        return error("VALIDATION_ERROR", "session_id must be a valid UUID")
     if sentiment not in _VALID_SENTIMENT:
-        sentiment = "neutral"
+        return error("VALIDATION_ERROR", f"invalid sentiment: {sentiment}")
+    if (promotion_saving_aed or 0) < 0:
+        return error("VALIDATION_ERROR", "promotion_saving_aed must be >= 0")
+    if (cart_total_aed or 0) < 0:
+        return error("VALIDATION_ERROR", "cart_total_aed must be >= 0")
+    if budget_aed is not None and budget_aed < 0:
+        return error("VALIDATION_ERROR", "budget_aed must be >= 0")
 
     incident = {
         "session_id": session_id,
@@ -92,7 +105,8 @@ class LogSessionRequest(BaseModel):
 
 
 @router.post("/tools/log-session")
-async def log_session_endpoint(req: LogSessionRequest) -> dict:
+@limiter.limit("60/minute")
+async def log_session_endpoint(request: Request, req: LogSessionRequest) -> dict:
     return log_session(
         req.session_id, req.customer_id, req.store_id, req.items_ordered,
         req.items_unavailable, req.substitutions, req.promotion_id,

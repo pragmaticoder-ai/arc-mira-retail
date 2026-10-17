@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 
+from tools.shared.retry import with_retry
 from tools.shared.settings import settings
 
 # Grocery categories the agent is allowed to use (ARC_SPEC FR-ARIA-03).
@@ -51,14 +52,18 @@ class MockLLM(LLM):
 
     def generate(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
         if settings.mock_server_url:
-            resp = httpx.post(
-                f"{settings.mock_server_url}/v1/gemini/generate",
-                json={"prompt": prompt, "model": model or settings.gemini_flash_model},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return resp.json()["text"]
+            return self._generate_http(prompt, model)
         return self._canned(prompt)
+
+    @with_retry(attempts=3)
+    def _generate_http(self, prompt: str, model: str | None) -> str:
+        resp = httpx.post(
+            f"{settings.mock_server_url}/v1/gemini/generate",
+            json={"prompt": prompt, "model": model or settings.gemini_flash_model},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()["text"]
 
     def classify_goal_to_categories(self, goal: str) -> list[str]:
         g = goal.lower()

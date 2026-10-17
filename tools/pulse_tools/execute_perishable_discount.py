@@ -11,13 +11,14 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.bigquery_client import get_bigquery
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.execute_perishable_discount")
 router = APIRouter()
@@ -118,5 +119,6 @@ class PerishableDiscountRequest(BaseModel):
 
 
 @router.post("/tools/execute-perishable-discount")
-async def execute_perishable_discount_endpoint(req: PerishableDiscountRequest) -> dict:
+@limiter.limit("5/minute")
+async def execute_perishable_discount_endpoint(request: Request, req: PerishableDiscountRequest) -> dict:
     return execute_perishable_discount(req.store_id)

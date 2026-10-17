@@ -6,12 +6,13 @@ approval is always required. Only called after calculate_impact().
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
+from tools.shared.rate_limit import limiter
 
 logger = get_logger("pulse.draft_purchase_order")
 router = APIRouter()
@@ -34,10 +35,21 @@ def draft_purchase_order(
     PENDING until the manager approves/rejects — the system never auto-approves.
     Only call after calculate_impact().
     """
-    if quantity <= 0:
-        return error("VALIDATION_ERROR", "quantity must be > 0")
+    # ── Validation (SPEC-PULSE-05 §4) ────────────────────────────────
+    if not (1 <= quantity <= 10000):
+        return error("VALIDATION_ERROR", "quantity must be 1..10000")
     if urgency not in _VALID_URGENCY:
         return error("VALIDATION_ERROR", f"invalid urgency: {urgency}")
+    if not (justification or "").strip():
+        return error("VALIDATION_ERROR", "justification is required")
+    if len(justification) > 1000:
+        return error("VALIDATION_ERROR", "justification exceeds 1000 chars")
+    if not (evidence_summary or "").strip():
+        return error("VALIDATION_ERROR", "evidence_summary is required")
+    if len(evidence_summary) > 500:
+        return error("VALIDATION_ERROR", "evidence_summary exceeds 500 chars")
+    if revenue_at_risk_aed < 0 or revenue_recoverable_aed < 0:
+        return error("VALIDATION_ERROR", "revenue figures must be >= 0")
 
     db = get_alloydb()
     product = db.get_product(product_id)
@@ -91,7 +103,8 @@ class DraftPORequest(BaseModel):
 
 
 @router.post("/tools/draft-purchase-order")
-async def draft_purchase_order_endpoint(req: DraftPORequest) -> dict:
+@limiter.limit("5/minute")
+async def draft_purchase_order_endpoint(request: Request, req: DraftPORequest) -> dict:
     return draft_purchase_order(
         req.product_id, req.store_id, req.quantity, req.urgency, req.justification,
         req.revenue_at_risk_aed, req.revenue_recoverable_aed, req.evidence_summary,

@@ -22,8 +22,8 @@ manager, who can review evidence, choose an action, and observe later outcomes.
 The local orchestration and feedback parser are deterministic rules, **not live
 Gemini execution**. Google SDK/ADK execution, AlloyDB, BigQuery ML, and deployment
 are deferred integrations. `USE_MOCK=false` does not turn them on. The architecture
-and deployment documents describe the intended cloud system, not a completed
-cloud deployment. SQLite is a single-host prototype, not shared storage across
+and deployment documents distinguish working local behavior from the intended
+cloud system; they do not claim a completed cloud deployment. SQLite is a single-host prototype, not shared storage across
 independently deployed Cloud Run instances.
 
 ## Run the complete local prototype
@@ -90,3 +90,14 @@ Tests cover real endpoint-to-storage behavior, separate processes, concurrent
 checkout, rollback, stale quotes, explicit customer evidence, action idempotency,
 and the manager-to-shopper loop. All customer and velocity seed data is synthetic;
 modeled revenue is labeled as an estimate. No retail performance claim is made.
+
+
+## Specifications and implementation status
+
+[ARC_SPEC.md](ARC_SPEC.md) is the current product specification (1.1).
+[ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md) and
+[AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) describe actual local execution and
+explicit future integration boundaries. [The specification index](specs/README.md)
+links the tool/workflow details and generated OpenAPI snapshots. Operational setup
+is in [DEPLOYMENT.md](DEPLOYMENT.md); contribution checks are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Google-oriented assets remain planned work.

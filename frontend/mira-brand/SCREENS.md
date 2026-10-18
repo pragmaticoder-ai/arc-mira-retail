@@ -1,257 +1,90 @@
-# SCREENS.md — Screen Inventory & Design Decisions
-> MIRA Retail · ARC Project · Reference for Kiro frontend generation
+# ARC screen inventory — current implementation
 
----
+Updated October 18, 2026 · Specification 1.1
 
-## ARIA App (Next.js) — 4 screens
+[BRAND.md](BRAND.md) remains the visual token/design reference. This document
+supersedes its older generated-layout assumptions where they conflict with the
+implemented workflow. The static mira-screens.html is a visual concept, not a
+live demonstration or a source of product/API behavior.
 
-### Screen 1: Login / Welcome
-**Route:** `/login`  
-**Purpose:** Customer authentication  
-**Layout:** Centered card on `#f8fafc` background  
-**Key elements:**
-- MIRA Retail logo (color variant, large, centered)
-- "ARIA grocery assistant active" badge in mira-50/mira-200
-- Email + password form inputs
-- Remember me checkbox + forgot password link
-- Primary login button (full width, mira-600)
-- Register link below
-- Privacy note at bottom
+## ARIA storefront
 
-**Design decisions:**
-- Card width: 320px, border-radius: 14px
-- No hero image — logo + badge carry the brand
-- Light background (not dark) — customer-facing, welcoming
+| Route / surface | Current behavior |
+|---|---|
+| /login | Demo entry form; submitting routes to the store. No authentication, account creation or password reset is implemented. |
+| / | Store navigation, responsive product grid, desktop category filters, always-expanded ARIA panel and shared cart |
+| /order/confirmed | Requires an actual stored order; shows canonical order total, promotion, delivery estimate and local-prototype note |
 
----
+There is no /shop route, minimized ARIA tab, separate order-history screen or
+checkout payment page. Navigation search and several header links remain presentational;
+they are not implemented product features. A cart count reflects shared cart state.
 
-### Screen 2: Main Store — Browse mode
-**Route:** `/` or `/shop`  
-**Purpose:** Category browsing, product discovery, ARIA minimised  
-**Layout:** Full-width nav + 3-column body (sidebar | grid | ARIA tab)
+### Catalog and cart
 
-**Nav (48px, #0f172a):**
-- Left: logo (light variant) + nav links (Grocery, Offers, Orders)
-- Right: search box + store selector + cart button + avatar
+The grid fetches the selected store's current local inventory and refreshes every
+ten seconds. Product states include available, unavailable, in-basket and approved
+discount. Unavailable products cannot be added through the grid. In-basket products
+can be incremented within displayed stock; quantity and price are revalidated by
+the server. Category, halal and maximum-product-price filters are browsing filters,
+not a replacement for the conversational basket budget.
 
-**Category sidebar (200px, #f1f5f9):**
-- 8 grocery categories with emoji + label
-- Active state: mira-50 background, mira-600 text
-- Halal toggle filter
-- Budget range slider
-- Store selector dropdown
+Editing the basket invalidates the quote and preview promotion. The CTA becomes
+**Review updated basket**. A returned server quote must be reviewed before
+**Confirm order** can place it. Changing store resets the basket and ARIA session.
+On small screens the category sidebar is hidden and the layout stacks vertically.
 
-**Product grid (fluid, #f8fafc):**
-- 3-column responsive grid
-- Product cards: white, 0.5px border, 8px radius
-- Product image area: mira-50 tint background, emoji placeholder
-- Product name (10px, slate-800), price (11px, mira-600)
-- "Add to cart" button (full width, mira-600)
-- Out of stock state: red-50 background, disabled button
-- Discount badge: pulse-50 background, amber text
+### ARIA conversation
 
-**ARIA minimised tab (44px strip, mira-600):**
-- Sprout mark icon
-- "ARIA" label rotated vertical
-- Click to expand ARIA panel
+The panel is labeled **Local rules · shared store inventory**. The initial demo
+suggestion explicitly requests brown rice, rather than inventing a stockout for
+every shopping session. The panel displays request progress, replies, operation
+summaries, explicit substitution feedback and live cart preview.
 
----
+For each unavailable original product:
 
-### Screen 3: ARIA in Action — Chat open
-**Route:** `/` (ARIA panel expanded)  
-**Purpose:** Active ARIA session — cart building, reasoning visible  
-**Layout:** Same as Screen 2 but ARIA panel replaces the minimised tab
+- **Meets my needs** accepts the alternative and records satisfied.
+- **Temporary compromise** accepts it while preserving an unresolved preference.
+- **Decline** records rejection and removes a substituted line where applicable.
+- Unrecognized feedback remains unknown. Multiple offers require product-specific
+  feedback, rather than attributing one statement to every product.
 
-**ARIA panel (280px, white):**
+Operation summaries can be expanded. Their ACTION/OBSERVATION labels describe
+local validation and persistence, not a live model's reasoning. Network and
+validation errors appear as messages rather than blank assistant bubbles.
 
-Header (mira-600):
-- "ARIA — grocery assistant" title
-- "Session active · Dubai Marina" subtitle
+### Receipt
 
-Chat thread:
-- Agent bubbles: mira-50 bg, mira-100 border, 0 8px 8px 8px radius
-- User bubbles: mira-600 bg, white text, 8px 0 8px 8px radius
-- Thinking state: pulse-50 bg, amber border, spinner
-- Reasoning chain: expandable, 3 step types:
-  - THOUGHT: mira left border, mira-50 bg
-  - ACTION: pulse left border, pulse-50 bg
-  - OBSERVATION: slate border, slate-50 bg
+The receipt requires a returned order. Browser session storage restores a local
+receipt on refresh; a direct visit without an order shows **No confirmed order**.
+**Continue shopping** clears the receipt/cart for a new shopper session. The total
+is an order total, not proof of payment. Delivery is a future local estimate.
 
-Cart preview (mira-50):
-- Item list with prices
-- Running total
-- Confirm order button
+## PULSE dashboard
 
-Input row:
-- Text input (slate-100 bg)
-- Send button (mira-600)
+There is one Streamlit manager workspace, without a manager login. It contains:
 
-**Product grid changes:**
-- Added items show mira-50 background + "✓ Added by ARIA" button state
-- Substituted items labelled "(subst.)"
-- Checking stock items show dashed border + spinner
+1. Store and period selectors, manual refresh and timed fragment refresh.
+2. Metrics for stockout sessions, explicit unmet needs, temporary compromises and
+   pending purchase orders.
+3. **The demand a completed sale can hide**: per-product outcomes, customer evidence,
+   synthetic-session labels, action comparison, manager decision and later outcomes.
+4. Stockout patterns, operational hypotheses, labeled financial assumptions and
+   persisted PO approval/rejection.
+5. Perishable discount proposals, batch-specific decisions and approval-controlled
+   local shopper prices.
 
----
+Actions and evidence are shown in the same workspace, not separate detail routes.
+Transfer is visibly a local inventory simulation; replenish creates a draft; defer
+keeps observation active. Success is shown only after a persisted write. A process
+memory warning appears when shared storage is not configured. A local rules label
+and synthetic data/estimate notes remain visible.
 
-### Screen 4: Order Confirmed
-**Route:** `/order/confirmed`  
-**Purpose:** Post-purchase confirmation  
-**Layout:** Centered card on page background
+The outcome monitor reports new request sessions first observed after a decision.
+It never labels those counts as proven causal revenue recovery. Approved/rejected
+POs survive reruns within the current deduplication cycle.
 
-**Card (380px):**
-- Green checkmark circle icon (success-50 bg)
-- Order number and store
-- Order summary box (mira-50 bg):
-  - Item count + subtotal
-  - Discount applied (amber)
-  - Delivery (free)
-  - Total paid
-- Delivery window card (slate-100 bg + truck icon)
-- ARIA bridge note: "ARIA logged this session. If anything was unavailable, PULSE will flag it."
-- Continue shopping button
+## Deferred surfaces
 
----
-
-## PULSE Dashboard (Streamlit) — 4 screens
-
-### Screen 5: Manager Login
-**Route:** Streamlit app root  
-**Purpose:** Authenticated manager access  
-**Layout:** Dark page (#0f172a) + centered white card
-
-**Key differences from ARIA login:**
-- Dark page background (operations context)
-- "PULSE agent active · 3 alerts pending" badge (amber)
-- "OPERATIONS DASHBOARD" tagline below logo
-- Store selector dropdown added
-- "Access dashboard" CTA (not "Sign in")
-- Security notice at bottom
-
----
-
-### Screen 6: Main Dashboard
-**Route:** Streamlit main view  
-**Purpose:** Overview of all operational alerts  
-**Layout:** Dark nav + 2-column (sidebar | main)
-
-**Dark nav (44px, #0f172a):**
-- Logo (light) + "/ PULSE Operations" breadcrumb
-- Live pill (pulse green)
-- Last refresh timestamp
-- Manager avatar
-
-**Streamlit sidebar (200px, #f1f5f9):**
-- Store selector
-- Period selector (Last 48 hours)
-- Refresh button (mira-600)
-- Last updated timestamp
-- Alert summary counts (stockouts / perishable / POs pending)
-
-**Main area (#f1f5f9):**
-
-Metric cards row (3 columns, white):
-- Incidents (48h) + delta
-- Revenue at risk (AED) in danger red + delta
-- POs pending in amber + context
-
-Alert cards (white, stacked):
-- Stockout cards: 3px left border, danger red
-- Perishable cards: 3px left border, amber
-- Approved cards: 3px left border, success green
-- Each card: header (title + AED impact) | body (root cause + evidence) | footer (approve/reject)
-
----
-
-### Screen 7: Alert Detail — Stockout
-**Route:** Streamlit on alert click  
-**Purpose:** Full root cause + evidence + PO approval  
-**Layout:** 2-column (detail | sidebar widgets)
-
-**Left column:**
-- Breadcrumb navigation
-- Impact metrics row (3 cards: lost / at risk / recoverable)
-- Root cause narrative with confidence badge
-- Full evidence block (data sources, row counts, formula)
-- PO details (product, quantity, urgency, supplier, justification)
-- Human-in-loop disclaimer
-- Approve / Reject buttons (full width)
-
-**Right column:**
-- Stockout prediction card (BigQuery ML output)
-- Incident timeline card
-
----
-
-### Screen 8: Perishable Discount Panel
-**Route:** Streamlit perishable tab  
-**Purpose:** Velocity-based discount proposal + approval  
-**Layout:** 2-column (alert + approved | flow explainer + tiers)
-
-**Left column:**
-- Active perishable alert (amber left border):
-  - 4-metric row (stock / days left / will expire / recoverable)
-  - Discount recommendation box (pulse-50 bg)
-  - Evidence block
-  - Approve discount / Reject buttons
-  - "Once approved, ARIA will surface this" note
-- Approved alert (green left border, shows result)
-
-**Right column:**
-- "How discounts reach customers" — 5-step numbered flow
-- Discount tiers reference card (3 / 2 / 1 days → 15% / 25% / 40%)
-
----
-
-## Component states to implement
-
-### Product card states
-| State | Background | Border | Button |
-|-------|-----------|--------|--------|
-| Default | white | slate-200 | mira-600 "Add" |
-| Hover | white | mira-200 | mira-600 "Add" |
-| Added by ARIA | mira-50 | mira-200 | mira-700 "✓ Added" |
-| Out of stock | danger-50 | danger-border | slate-300 disabled |
-| Discounted | white | pulse-200 | pulse-500 "X% off" badge |
-
-### Alert card states
-| State | Left border | Background | CTA |
-|-------|------------|-----------|-----|
-| Stockout | danger red | white | Approve PO |
-| Perishable | amber | white | Approve discount |
-| Approved | success green | white | View result |
-| Pending review | slate | white | Review |
-
-### Button states
-| State | Background | Color |
-|-------|-----------|-------|
-| Default | mira-600 | white |
-| Hover | mira-700 | white |
-| Disabled | slate-300 | slate-400 |
-| Loading | mira-600 | white + spinner |
-
----
-
-## Navigation flow
-
-```
-ARIA APP
-Login → Main Store (browse) → [open ARIA] → ARIA in Action → Order Confirmed
-                           → [click product] → (product quick view — future)
-
-PULSE DASHBOARD  
-Login → Main Dashboard → [click alert] → Alert Detail → [approve/reject]
-                      → [perishable tab] → Perishable Panel → [approve/reject]
-```
-
----
-
-## Responsive notes
-
-- ARIA app: minimum width 900px (3-column layout)
-- Below 900px: ARIA panel hides to tab, sidebar collapses to top filter bar
-- PULSE dashboard: minimum width 800px (Streamlit native)
-- Both apps: desktop-first for hackathon, mobile is Phase 2
-
----
-
-*MIRA Retail · Screen Inventory v1.0 · ARC Project · Pragmatic Engineers*
+Production customer/manager authentication, account management, payment, order
+history, supplier submission, logistics tracking and model-backed conversation
+are future integration work. Do not include them as working screens in the demo.

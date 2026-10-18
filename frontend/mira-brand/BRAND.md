@@ -1,4 +1,9 @@
 # MIRA Retail — Brand & Design System
+
+> **Implementation status (October 18, 2026):** This file is a visual design
+> reference. [SCREENS.md](SCREENS.md) describes the implemented local workflow;
+> [ARC_SPEC.md](../../ARC_SPEC.md) defines product behavior. Planned layouts and
+> model-related labels here do not establish working Google integration.
 > Reference document for AI-assisted frontend generation (Kiro / Cursor / Copilot)
 > Version 1.0 · ARC Project · Pragmatic Engineers
 
@@ -592,7 +597,7 @@ When generating frontend code using this brand document:
 9. **Primary buttons use `btn-primary`** — never inline the green color
 10. **Amber is for promotions, discounts, perishable alerts only** — not for general UI accents
 11. **The pulse line in the logo is always amber** — never change it programmatically
-12. **Auto-refresh** — PULSE dashboard uses `st.rerun()` every 10 seconds for live state changes
+12. **Auto-refresh** — PULSE dashboard uses a timed `st.fragment` (10 seconds by default); inventory and decision state comes from shared local storage
 
 ---
 

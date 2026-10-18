@@ -1,155 +1,113 @@
-# CONTRIBUTING.md — Developer Guide
-> MIRA Retail · ARC v1.0
+# Contributing to ARC
 
----
+Updated October 18, 2026 · Specification 1.1
 
-## Local setup
+## Setup
 
-```bash
-git clone https://github.com/pragmatic-engineers/arc
-cd arc
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements-dev.txt
-cp .env.example .env       # fill in your local values
-```
-
----
-
-## Project conventions
-
-### Python
-- Python 3.11+
-- All tool functions return plain dicts (JSON-serializable)
-- All tool functions have a docstring in the exact format shown in `AGENT_CONTRACTS.md`
-- Pydantic models in `tools/shared/models.py` for all shared data structures
-- Type hints on all function signatures
-
-### Naming
-- Tool functions: `snake_case` verbs — `build_cart`, `detect_patterns`, `execute_perishable_discount`
-- AlloyDB tables: `snake_case` nouns — `customer_profiles`, `purchase_orders`
-- BigQuery tables: `snake_case` nouns — `incidents`, `promotion_log`
-- Cloud Run services: `arc-{name}-{type}` — `arc-aria-agent`, `arc-pulse-tools`
-- Docker images: `arc-{name}` — `arc-aria`, `arc-pulse`, `arc-tools`, `arc-frontend`
-
-### Git
-- Branch naming: `feature/`, `fix/`, `data/`
-- Commit messages: imperative mood — "Add suggest_substitution tool" not "Added"
-- One PR per tool function — keeps review small and fast
-- Never commit `.env` files or service account JSON keys
-
-### Tool function structure
-Every tool function follows this pattern:
-```python
-# tools/aria_tools/build_cart.py
-
-import logging
-from tools.shared.alloydb_client import get_connection
-from tools.shared.models import CartItem
-
-logger = logging.getLogger(__name__)
-
-def build_cart(
-    goal: str,
-    dietary_preference: str,
-    budget_aed: float,
-    household_size: int,
-    store_id: str
-) -> dict:
-    """
-    Builds a grocery cart from AlloyDB inventory matching the customer goal.
-    Filters by dietary_preference. Selects best-value items within budget_aed.
-    Returns items list, total_aed, and items_unavailable list.
-    Call after get_customer_context(). Always pass dietary_preference.
-    """
-    try:
-        # implementation
-        conn = get_connection()
-        # query AlloyDB...
-        return {"items": [...], "total_aed": 0.0, "items_unavailable": []}
-    except Exception as e:
-        logger.error(f"build_cart failed: {e}")
-        return {
-            "error": True,
-            "error_code": "BUILD_CART_ERROR",
-            "error_message": str(e),
-            "retry_suggested": True
-        }
-```
-
----
-
-## Testing
+From the repository root, use Python 3.11+, uv and Node 18.17+:
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific agent tests
-pytest tests/test_aria_tools.py -v
-pytest tests/test_pulse_tools.py -v
-pytest tests/test_bridge.py -v
-
-# Run with coverage
-pytest tests/ --cov=tools --cov-report=term-missing
+uv sync --group dev
+uv pip install -r frontend/pulse-dashboard/requirements.txt
+npm --prefix frontend/aria-app ci
+.venv/bin/python scripts/run_local.py
 ```
 
-### Test data
-- Tests use a local SQLite mock (no AlloyDB connection required)
-- BigQuery tests use the BigQuery emulator
-- See `tests/conftest.py` for fixtures
+The launcher sets the environment and shared storage for every local app. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for alternate ports and separate terminals. Google
+credentials and Docker are not required for the current local acceptance checks.
 
----
+## Working conventions
 
-## Frontend development
+- Use a feature/, fix/ or data/ branch. Current workflow changes are on
+  feature/unmet-demand-loop. Write imperative commit messages.
+- Keep unrelated changes out of a commit. Group cross-surface changes when needed
+  to preserve a single working contract, such as quote review or manager approval.
+- Python tool functions return JSON-serializable dictionaries. Add typed boundary
+  models where useful and validate authoritative inventory at quote/checkout.
+- Keep business decisions in backend tools/adapters, not UI-only state overrides.
+- Never label local rules, synthetic statements or simulated actions as a live
+  model, actual customer dataset or real supplier/logistics execution.
+- Keep credentials, `.env` files, database files, build output and node_modules
+  out of source control. Use a fresh data directory rather than deleting a shared
+  demo store when repeating a test.
 
-### ARIA app (Next.js) — your responsibility
+## Source map
+
+| Change | Primary files |
+|---|---|
+| Shopper session / quote flow | agents/aria/main.py, tools/shared/pricing.py |
+| Intent / feedback rules | tools/aria_tools/parse_intent.py, tools/shared/demand.py |
+| Atomic operational writes | tools/shared/alloydb_client.py |
+| Incident lifecycle / aggregation | tools/aria_tools/log_session.py, tools/shared/bigquery_client.py |
+| Demand proposals / actions / observation | tools/pulse_tools/demand_intelligence.py |
+| Customer UI / proxy | frontend/aria-app |
+| Manager UI / data provider | frontend/pulse-dashboard |
+| Future Google integrations | agents/*/agent.py and Real* adapter implementations |
+
+A setting or installed SDK is not proof that an integration works. Preserve a
+clear local/Google boundary while the real execution path remains deferred.
+
+## Validation
+
 ```bash
-cd frontend/aria-app
-npm install
-npm run dev
-# → open http://localhost:3000
-# → set ARIA_AGENT_URL in .env.local to point to local or deployed agent
+.venv/bin/python -m pytest
+.venv/bin/ruff check agents tools frontend/pulse-dashboard scripts tests
+.venv/bin/mypy agents tools frontend/pulse-dashboard/data_provider.py
+.venv/bin/python -m scripts.evaluate_demand
+npm --prefix frontend/aria-app run build
 ```
 
-**Stack:** Next.js 14 (App Router), TypeScript, Tailwind CSS
-**Key components to build:** NavBar, CategorySidebar, ProductGrid, AriaPanel, ReasoningDrawer, CartContext
+Tests exercise behavior, including cross-process SQLite visibility, stock/order
+rollback, concurrent checkout, retries, current-quote confirmation, constraints,
+explicit compromises, manager decisions and later fulfillment. They do not use
+Docker, a BigQuery emulator or a live model. Streamlit tests require the dashboard
+requirements; a missing optional dependency can cause that module to be skipped.
 
-### PULSE dashboard (Streamlit) — partner's responsibility
+When changing checkout or persistence, preserve meaningful concurrency/rollback
+coverage. When changing language rules, test ambiguous and negative statements;
+a bare acceptance must not become evidence of satisfaction. Do not present the
+curated feedback fixture as a held-out benchmark.
+
+## Documentation and API maintenance
+
+- Start at [ARC_SPEC.md](ARC_SPEC.md) and [specs/README.md](specs/README.md).
+- Update contracts and tool/workflow specifications when behavior changes. Preserve
+  the distinction between Python-only arguments and the Pydantic HTTP model.
+- Regenerate service OpenAPI from each FastAPI application's `app.openapi()` after
+  changing request models. Generic dict response bodies still need prose and tests.
+- Update DATA_MODEL for persisted fields and decisions. A planned SQL DDL edit is
+  not a migration of an existing database.
+- Keep the three-minute demo and README reproducible. Label fixture origins,
+  scenario estimates and simulated actions at the point they are shown.
+- Branding guidance lives under frontend/mira-brand; current behavior is described
+  by SCREENS.md and the product specification rather than visual mockups.
+
+For documentation-only changes, verify local links, OpenAPI path/schema consistency
+and runnable examples. Repeat application tests when behavior or executable assets
+change; avoid pretending a prose update is new runtime validation.
+
+
+### Regenerate OpenAPI snapshots
+
+From the repository root after changing an HTTP request model:
+
 ```bash
-cd frontend/pulse-dashboard
-pip install streamlit
-streamlit run pulse_dashboard.py
-# → open http://localhost:8501
+.venv/bin/python - <<'PYCODE'
+from pathlib import Path
+import yaml
+from agents.aria.main import app as aria
+from agents.pulse.main import app as pulse
+from tools.aria_tools.main import app as aria_tools
+from tools.pulse_tools.main import app as pulse_tools
+
+for name, app in (("aria_agent", aria), ("pulse_agent", pulse),
+                  ("aria_tools", aria_tools), ("pulse_tools", pulse_tools)):
+    Path(f"specs/openapi_{name}.yaml").write_text(
+        yaml.safe_dump(app.openapi(), sort_keys=False, allow_unicode=True, width=100)
+    )
+PYCODE
 ```
 
-## ADK local development
-
-```bash
-# Test ARIA agent interactively
-cd agents/aria
-adk web .
-# → open http://localhost:8000
-# → type "Weekly groceries, family of 4, halal, AED 300"
-# → observe reasoning chain in the ADK web UI
-
-# Test PULSE agent
-cd agents/pulse
-adk web .
-```
-
----
-
-## Adding a new tool function
-
-1. Create file in `tools/aria_tools/` or `tools/pulse_tools/`
-2. Write the function with a precise docstring (this drives agent reasoning)
-3. Add the error response format
-4. Register in `agents/aria/tools.py` or `agents/pulse/tools.py`
-5. Add to the agent's `FunctionTool` list in `agent.py`
-6. Write a test in `tests/`
-7. Update `AGENT_CONTRACTS.md` with the new contract
-
----
-
-*MIRA Retail · ARC v1.0 · Contributing v1.0*
+This updates documentation snapshots only. Keep runtime version values from the
+application and verify the result against its `app.openapi()` output.

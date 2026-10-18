@@ -1,284 +1,202 @@
-# DATA_MODEL.md — AlloyDB + BigQuery Schemas
-> MIRA Retail · ARC v1.0
+# ARC data model
 
----
+Updated October 18, 2026 · Specification 1.1
 
-## 1. AlloyDB schema (operational data)
+## 1. Storage modes
 
-```sql
--- ════════════════════════════════════════
--- Extensions
--- ════════════════════════════════════════
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS google_ml_integration;
+`USE_MOCK=true` selects the working local implementations. With paths configured,
+operational data and incidents persist in **two different SQLite files**. Without
+paths, adapters use isolated process memory for tests. The Google `Real*` adapters
+remain unimplemented; the SQL files describe a future managed-database mapping.
 
--- ════════════════════════════════════════
--- Stores
--- ════════════════════════════════════════
-CREATE TABLE stores (
-    store_id        VARCHAR(50) PRIMARY KEY,
-    store_name      VARCHAR(200) NOT NULL,
-    area            VARCHAR(100),
-    city            VARCHAR(50) DEFAULT 'Dubai',
-    address         TEXT,
-    is_active       BOOLEAN DEFAULT true
-);
+| Configuration | Contents | Launcher default |
+|---|---|---|
+| ARC_STATE_DB | Inventory, customers, promotions, orders, POs, sessions, decisions | data/local/operations.sqlite |
+| ARC_BRIDGE_DB | Session incidents and substitution-gap counters | data/local/incidents.sqlite |
 
--- ════════════════════════════════════════
--- Customer profiles
--- ════════════════════════════════════════
-CREATE TABLE customer_profiles (
-    customer_id         VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                VARCHAR(100) NOT NULL,
-    email               VARCHAR(100) UNIQUE,
-    phone               VARCHAR(20),
-    dietary_preference  VARCHAR(20) DEFAULT 'none'
-                        CHECK (dietary_preference IN ('halal','vegetarian','vegan','none')),
-    household_size      INTEGER DEFAULT 1,
-    weekly_budget_aed   DECIMAL(10,2),
-    preferred_store     VARCHAR(50) REFERENCES stores(store_id),
-    created_at          TIMESTAMP DEFAULT NOW(),
-    updated_at          TIMESTAMP DEFAULT NOW()
-);
+If only `ARC_BRIDGE_DB` is set, operational storage defaults to that path plus
+`.state`. Equal resolved paths are rejected. The launcher sets both explicitly.
 
--- ════════════════════════════════════════
--- Suppliers
--- ════════════════════════════════════════
-CREATE TABLE suppliers (
-    supplier_id     VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    supplier_name   VARCHAR(200) NOT NULL,
-    contact_email   VARCHAR(100),
-    lead_time_days  INTEGER DEFAULT 2
-);
+## 2. Local physical schema
 
--- ════════════════════════════════════════
--- Inventory (with AlloyDB AI vector embeddings)
--- ════════════════════════════════════════
-CREATE TABLE inventory (
-    product_id          VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_name        VARCHAR(200) NOT NULL,
-    category            VARCHAR(100),
-    brand               VARCHAR(100),
-    price_aed           DECIMAL(10,2) NOT NULL,
-    dietary_flags       VARCHAR(200),   -- comma-separated: halal,vegetarian,vegan
-    store_id            VARCHAR(50) NOT NULL REFERENCES stores(store_id),
-    aisle_ref           VARCHAR(20),    -- e.g. "A3", "B12"
-    stock_quantity      INTEGER DEFAULT 0,
-    reorder_threshold   INTEGER DEFAULT 10,
-    supplier_id         VARCHAR(36) REFERENCES suppliers(supplier_id),
-    embedding           vector(768),    -- AlloyDB AI: ScaNN semantic search
-    updated_at          TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX ON inventory USING scann(embedding cosine) WITH (num_leaves=10);
-CREATE INDEX ON inventory(store_id, category);
-CREATE INDEX ON inventory(store_id, stock_quantity);
-
--- ════════════════════════════════════════
--- Orders
--- ════════════════════════════════════════
-CREATE TABLE orders (
-    order_id                VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id             VARCHAR(36) NOT NULL REFERENCES customer_profiles(customer_id),
-    store_id                VARCHAR(50) NOT NULL REFERENCES stores(store_id),
-    items                   JSONB NOT NULL,
-    -- [{product_id, product_name, quantity, price_aed, substituted: bool}]
-    total_aed               DECIMAL(10,2) NOT NULL,
-    promotion_id            VARCHAR(36),
-    promotion_saving_aed    DECIMAL(10,2) DEFAULT 0,
-    status                  VARCHAR(20) DEFAULT 'confirmed'
-                            CHECK (status IN ('confirmed','processing','delivered','cancelled')),
-    delivery_window_start   TIMESTAMP,
-    delivery_window_end     TIMESTAMP,
-    created_at              TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX ON orders(customer_id);
-CREATE INDEX ON orders(store_id, created_at);
-
--- ════════════════════════════════════════
--- Promotions
--- ════════════════════════════════════════
-CREATE TABLE promotions (
-    promotion_id        VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                VARCHAR(200) NOT NULL,
-    description         TEXT,
-    category            VARCHAR(100),       -- applies to which product category
-    dietary_filter      VARCHAR(20),        -- null = applies to all
-    discount_pct        DECIMAL(5,2),       -- e.g. 15.00 = 15%
-    discount_flat_aed   DECIMAL(10,2),      -- alternative: flat discount
-    min_cart_aed        DECIMAL(10,2) DEFAULT 0,
-    max_uses            INTEGER,            -- null = unlimited
-    times_applied       INTEGER DEFAULT 0,
-    valid_from          TIMESTAMP NOT NULL,
-    valid_until         TIMESTAMP NOT NULL,
-    is_active           BOOLEAN DEFAULT true
-);
-
--- ════════════════════════════════════════
--- Replenishment schedules
--- ════════════════════════════════════════
-CREATE TABLE replenishment_schedule (
-    schedule_id             VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id                VARCHAR(50) NOT NULL REFERENCES stores(store_id),
-    product_id              VARCHAR(36) NOT NULL REFERENCES inventory(product_id),
-    supplier_id             VARCHAR(36) REFERENCES suppliers(supplier_id),
-    delivery_day            VARCHAR(20),    -- Monday, Tuesday...
-    delivery_time           TIME,
-    quantity_per_delivery   INTEGER NOT NULL,
-    lead_time_days          INTEGER DEFAULT 1,
-    UNIQUE(store_id, product_id)
-);
-
--- ════════════════════════════════════════
--- Purchase orders (PULSE creates, manager approves)
--- ════════════════════════════════════════
-CREATE TABLE purchase_orders (
-    po_id               VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id          VARCHAR(36) NOT NULL REFERENCES inventory(product_id),
-    store_id            VARCHAR(50) NOT NULL REFERENCES stores(store_id),
-    supplier_id         VARCHAR(36) REFERENCES suppliers(supplier_id),
-    quantity            INTEGER NOT NULL,
-    urgency             VARCHAR(10) DEFAULT 'medium'
-                        CHECK (urgency IN ('low','medium','high','critical')),
-    justification       TEXT,
-    revenue_at_risk_aed DECIMAL(10,2),
-    status              VARCHAR(20) DEFAULT 'pending'
-                        CHECK (status IN ('pending','approved','rejected')),
-    manager_note        TEXT,
-    created_by          VARCHAR(20) DEFAULT 'PULSE',
-    created_at          TIMESTAMP DEFAULT NOW(),
-    reviewed_at         TIMESTAMP,
-    reviewed_by         VARCHAR(100)
-);
-
-CREATE INDEX ON purchase_orders(store_id, status);
-CREATE INDEX ON purchase_orders(product_id, status);
-```
-
----
-
-## 2. BigQuery schema (analytics bridge)
+Operational database:
 
 ```sql
--- Dataset: arc_dataset
--- Region: asia-southeast1 (Singapore)
-
--- ════════════════════════════════════════
--- Main bridge: ARIA writes, PULSE reads
--- ════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS arc_dataset.incidents (
-    session_id              STRING NOT NULL,
-    customer_id             STRING,
-    store_id                STRING,
-    timestamp               TIMESTAMP,
-
-    -- What was ordered
-    items_ordered           JSON,
-    -- [{product_id, product_name, quantity, price_aed}]
-
-    -- What wasn't available
-    items_unavailable       JSON,
-    -- [{product_id, product_name}]
-
-    -- Substitution outcomes
-    substitutions_offered   JSON,
-    -- [{original_product_id, substitute_product_id, accepted: bool}]
-
-    -- Promotion
-    promotion_id            STRING,
-    promotion_saving_aed    FLOAT64,
-
-    -- Cart totals
-    cart_total_aed          FLOAT64,
-    budget_aed              FLOAT64,
-
-    -- Outcome
-    session_sentiment       STRING,   -- positive | neutral | negative
-    order_placed            BOOL,
-    abandonment_reason      STRING    -- null if order placed
-)
-PARTITION BY DATE(timestamp)
-CLUSTER BY store_id, session_sentiment;
-
--- ════════════════════════════════════════
--- Inventory change audit log
--- ════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS arc_dataset.inventory_log (
-    log_id          STRING NOT NULL,
-    product_id      STRING,
-    store_id        STRING,
-    event_type      STRING,    -- stockout | restock | adjustment
-    quantity_before INTEGER,
-    quantity_after  INTEGER,
-    logged_at       TIMESTAMP
-)
-PARTITION BY DATE(logged_at)
-CLUSTER BY store_id, event_type;
-
--- ════════════════════════════════════════
--- Promotion effectiveness log
--- ════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS arc_dataset.promotion_log (
-    log_id              STRING NOT NULL,
-    promotion_id        STRING,
-    customer_id         STRING,
-    store_id            STRING,
-    cart_before_aed     FLOAT64,
-    cart_after_aed      FLOAT64,
-    saving_aed          FLOAT64,
-    converted           BOOL,
-    logged_at           TIMESTAMP
-)
-PARTITION BY DATE(logged_at)
-CLUSTER BY promotion_id;
-
--- ════════════════════════════════════════
--- BigQuery ML demand forecast model
--- (run once after seed data is loaded)
--- ════════════════════════════════════════
-CREATE OR REPLACE MODEL arc_dataset.demand_forecast
-OPTIONS(
-    model_type         = 'ARIMA_PLUS',
-    time_series_timestamp_col = 'timestamp',
-    time_series_data_col      = 'incident_count',
-    time_series_id_col        = 'product_id',
-    forecast_horizon   = 7,
-    data_frequency     = 'daily'
-) AS
-SELECT
-    TIMESTAMP_TRUNC(timestamp, DAY) AS timestamp,
-    product_id,
-    COUNT(*) AS incident_count
-FROM (
-    SELECT timestamp,
-           JSON_VALUE(item, '$.product_id') AS product_id
-    FROM arc_dataset.incidents,
-    UNNEST(JSON_QUERY_ARRAY(items_unavailable)) AS item
-)
-GROUP BY 1, 2;
+CREATE TABLE arc_state (
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    payload TEXT NOT NULL
+);
 ```
 
----
+The JSON payload contains `inventory` (list of store/product rows), `customers`,
+`promotions`, `orders`, `purchase_orders`, `sessions` and `decisions`. This snapshot
+layout serializes operational writes; it is not a normalized relational schema
+or a scalable multi-instance database. Replenishment schedules are loaded from
+seed data rather than persisted in the snapshot.
 
-## 3. Seed data overview
+Incident database:
 
-### Mock MIRA Retail stores (data/seed/customer_profiles.sql)
-- 3 stores: Dubai Marina, JBR, Al Barsha
-- 5 customer personas: Sarah (halal, family 4), Ahmed (none, single), Fatima (vegetarian, family 3), Kumar (none, couple), Layla (halal, family 5)
+```sql
+CREATE TABLE arc_incidents (
+    session_id TEXT PRIMARY KEY,
+    payload TEXT
+);
+CREATE TABLE arc_sub_gaps (
+    product_id TEXT,
+    store_id TEXT,
+    n INTEGER,
+    PRIMARY KEY(product_id, store_id)
+);
+```
 
-### Mock inventory (data/seed/inventory.sql)
-- 50 products across 8 categories: dairy, grains, meat (halal), vegetables, fruits, beverages, snacks, cleaning
-- Realistic MIRA Retail pricing in AED
-- AlloyDB embeddings generated at seed time
+Both databases enable WAL. Operational writes use `BEGIN IMMEDIATE`; incident
+upserts are independently committed. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+cross-store atomicity limitation and intended outbox design.
 
-### Mock promotions (data/seed/promotions.sql)
-- 5 active promotions: rice 10% off, halal chicken bundle, dairy saver pack, fresh veg 15% off, weekend family bundle
+## 3. Operational records
 
-### Mock replenishment (data/seed/replenishment.sql)
-- Realistic delivery schedules per store per product
-- Intentional gap: brown rice at Dubai Marina delivered Tuesday 2PM but peaks Monday-Wednesday 10AM-12PM (the demo scenario)
+### Inventory
 
----
+A row is identified by `(product_id, store_id)` and includes product name,
+category, brand, base price, comma-separated dietary flags, aisle, stock quantity,
+reorder threshold, supplier, perishability, optional expiry date and discount fields.
+The effective price uses `discounted_price_aed` only when `discount_active` is true.
 
-*MIRA Retail · ARC v1.0 · Data Model v1.0*
+Discount approval is store-specific and recalculates the discounted price from
+the approved percentage. Transfer preserves the source's reorder threshold and
+increments the destination in the same transaction. Checkout consolidates duplicate
+product lines before checking and decrementing stock.
+
+Synthetic perishable expiry offsets are applied when a fresh operational store is
+created, relative to the current UAE business date. Persisted inventory continues
+to age naturally; opening an existing store does not reset expiry dates. The Laban
+seed discount is initially inactive.
+
+### Orders
+
+| Field | Meaning |
+|---|---|
+| order_id | Generated local order identifier |
+| customer_id, store_id | Order ownership and inventory scope |
+| items | Canonical product names, quantities, current prices and basket flags |
+| total_aed, promotion_id | Revalidated quoted total and eligible promotion |
+| idempotency_key | Hash of customer/store/session-or-legacy inputs and basket |
+| status | confirmed for successful local checkout |
+| created_at | UAE-aware ISO timestamp |
+| delivery_start_iso, estimated_delivery_window | Future local delivery estimate; not a logistics booking |
+
+Session-based checkout keys persist without the legacy timeout. Calls without a
+session key use a 60-second duplicate window. Stock changes, usage counters, order
+and session snapshot writes participate in the operational transaction. No payment
+record or payment-provider execution is implemented.
+
+### Shopper sessions
+
+`session_id` is a UUID string. Each session includes customer/store binding,
+dietary preference, budget, household size, persistent exclusions, current cart,
+quote ID, original requested product IDs, unavailable products, substitution offers,
+accepted substitutions, demand signals, logging status and optional order/closed state.
+
+The quote ID changes when the basket is repriced. A shopper must review a changed
+basket or changed price before confirming. The active browser cart can contain
+unquoted edits; those edits are not authoritative order data. A confirmed receipt
+is cached in browser session storage for refresh; there is no order-history API.
+
+### Purchase orders
+
+Records include PO ID, product/store, quantity, urgency, justification, optional
+supplier and illustrative impact/evidence fields, human-approval requirement,
+creator, creation time, status and optional decision time. Status is pending,
+approved or rejected. Deduplication reuses any of those states for the same
+product/store within 24 hours. Newer cycles can create a new proposal.
+
+### Manager decisions
+
+| Family | Key | Persisted content |
+|---|---|---|
+| Demand | demand:{store}:{product}:{business_date} | Selected action, quantity, baseline outcome counts, evidence session IDs, execution label, decision time; optional source store or PO ID |
+| Discount | discount:{store}:{product}:{expiry_date} | approved/rejected, percentage, product/store, action=discount and decision time |
+
+Demand actions are transfer, replenish or defer. Repeated identical decisions
+return the existing record. Conflicting decisions are rejected. Replenishment
+records a drafted PO; the manager must review that PO separately.
+
+## 4. Incident records
+
+The bridge maintains **one evolving row per session**, not a row per utterance.
+An upsert preserves the first timestamp while replacing the latest session state.
+The returned logging-operation timestamp need not be that preserved event time.
+
+| Field | Meaning |
+|---|---|
+| session_id, customer_id, store_id | Session UUID and demo identities |
+| timestamp | First persisted session timestamp |
+| requested_items | Explicitly requested original product IDs |
+| items_ordered | Canonical lines when an order was placed |
+| items_unavailable | Requested originals unavailable during the session |
+| substitutions_offered | Original/alternative IDs and acceptance flags |
+| demand_signals | Structured product-level outcome evidence |
+| session_status | active, completed or abandoned |
+| order_placed | Whether this session has a confirmed local order |
+| promotion_id, promotion_saving_aed | Applied quote promotion information |
+| cart_total_aed, budget_aed | Basket and constraint context |
+| session_sentiment | Existing neutral/positive/negative contract field; local orchestration uses neutral |
+| abandonment_reason | Reason recorded when the session closes without an order |
+| data_origin | synthetic_seed for historical demo incidents; absent on local customer rows |
+
+Active unfinished sessions are not counted as abandonment by the current writer.
+Legacy rows lacking `session_status` still use their `order_placed` flag for the
+older stockout aggregation. No idle-timeout abandonment detection is implemented.
+
+### Demand signal
+
+```json
+{
+  "product_id": "rice_brown_500g",
+  "product_name": "Brown Rice 500g",
+  "outcome": "compromise",
+  "substitute_product_id": "rice_basmati_5kg",
+  "evidence": "Okay this time; I still prefer the original.",
+  "evidence_source": "customer_statement",
+  "certainty": "explicit"
+}
+```
+
+Outcomes are satisfied, compromise, rejected, abandoned, fulfilled or unknown.
+Explicit unresolved counts sum compromise/rejected/abandoned. Unknown is excluded.
+`fulfilled` is created from a confirmed order containing the requested original
+and uses `evidence_source=order_record`, `certainty=observed`. Synthetic statements
+use a synthetic source label. `certainty` is not a calibrated probability.
+
+The Python boundary is documented by `DemandSignal` in `tools/shared/models.py`.
+The current logger validates required product/outcome values; it does not enforce
+that entire Pydantic model on every stored legacy row. One current signal per
+product/session is used in aggregation.
+
+## 5. Aggregates and observation
+
+Stockout patterns deduplicate unavailable products within each session, filter
+by store/window and attach sample sessions, first/last timestamps, peak-hour and
+substitution-acceptance evidence. Default minimum: five incidents over 48 hours.
+
+Demand insights separately aggregate the six outcome categories, attach customer
+statements and source labels, compare actions and include the persisted decision.
+At least three explicit unresolved signals are needed for stock-changing options.
+Post-decision monitoring compares a stored baseline to sessions whose preserved
+first timestamp is later than the decision. It is descriptive, not causal, and
+retains the historical evidence rather than deleting it after an intervention.
+
+## 6. Future managed-database mapping
+
+- [data/schema/alloydb_schema.sql](data/schema/alloydb_schema.sql): original planned
+  normalized operational tables. It does not yet cover the complete local session,
+  quote, decision and outbox design. Production migration work remains.
+- [data/schema/bigquery_schema.sql](data/schema/bigquery_schema.sql): planned incident
+  JSON columns now include demand_signals, requested_items and session_status.
+  `CREATE TABLE IF NOT EXISTS` does not migrate an existing table; explicit schema
+  migrations are needed before a real adapter can use these fields.
+- `data/seed/01_stores_suppliers_customers.sql`, `02_inventory.sql`,
+  `03_promotions.sql`, `04_replenishment.sql` are cloud-oriented fixtures. Current
+  local adapters use `tools/shared/mock_inventory.py` and synthetic incident seeds.
+- SQL forecast definitions are planned assets, not evidence that BigQuery ML is
+  trained or called by the prototype.

@@ -1,259 +1,62 @@
-# SPEC-ARIA-03: build_cart
-> MIRA Retail · ARC Project · ARIA CX Agent
-> Version 1.0 | Status: Draft
+# SPEC-ARIA-03 — build_cart
 
----
+Updated October 18, 2026 · Specification 1.1 · Implemented local behavior
 
-## 1. OVERVIEW
+## 1. Purpose and status
 
-**Function:** `build_cart`  
-**Agent:** ARIA (CX Agent)  
-**Layer:** Tool function → Cloud Run → FastAPI → AlloyDB  
-**Purpose:** Build a grocery cart from AlloyDB inventory that matches the customer's goal, dietary preference, and budget. Returns a list of recommended items and flags any unavailable products.
+Implemented local tool. Processing behavior and limits are specified below.
 
-**Why it exists:** Cart building is the core value of ARIA. Rather than the customer manually searching for each item, ARIA builds the entire cart from a single goal statement — filtered by dietary restrictions, optimised for budget, and scoped to what is physically available at the customer's store.
+Google execution/adapters remain deferred. This specification supersedes the
+original cloud-first implementation plan for this tool.
 
----
+## 2. Interfaces
 
-## 2. INPUTS
-
-| Field | Type | Required | Constraints |
-|-------|------|----------|-------------|
-| `goal` | string | Yes | Non-empty, max 500 chars |
-| `dietary_preference` | enum | Yes | halal, vegetarian, vegan, none |
-| `budget_aed` | float | Yes | > 0, <= 10000 |
-| `household_size` | integer | Yes | 1–20 |
-| `store_id` | string | Yes | Must exist in stores table |
-
-**Example input:**
-```json
-{
-  "goal": "weekly groceries",
-  "dietary_preference": "halal",
-  "budget_aed": 300.00,
-  "household_size": 4,
-  "store_id": "dubai_marina_01"
-}
-```
-
----
-
-## 3. STEP BY STEP LOGIC
-
-```
-Step 1: Validate all inputs
-        → Validate goal length, dietary enum, budget range, store_id exists
-
-Step 2: Call Gemini 1.5 Flash to map goal to grocery categories
-        → "weekly groceries" → [dairy, grains, halal_meat, vegetables, fruits, beverages]
-        → "biryani ingredients" → [grains, halal_meat, condiments, vegetables]
-        → Restrict to 8 allowed categories only
-
-Step 3: Query AlloyDB inventory for each category
-        → SELECT * FROM inventory
-          WHERE store_id = $1
-          AND category = ANY($2)
-          AND dietary_flags ILIKE '%' || $3 || '%'  (if halal/vegetarian/vegan)
-          AND stock_quantity > 0
-          ORDER BY price_aed ASC
-
-Step 4: Select items for cart
-        → Pick representative items per category based on household_size
-        → Household multiplier: 1-2 persons=1x, 3-4=2x, 5+=3x
-        → Flag items with stock_quantity = 0 as unavailable
-
-Step 5: Calculate total
-        → total_aed = SUM(item.price_aed * item.quantity)
-
-Step 6: Return BuildCartResponse
-        → items: list of available CartItemResponse
-        → items_unavailable: list of products found in category but out of stock
-        → total_aed: sum
-```
-
----
-
-## 4. VALIDATIONS & SANITY CHECKS
-
-### Input validations
-| Check | Rule | Error code |
-|-------|------|------------|
-| goal not empty | len(strip(goal)) >= 1 | VALIDATION_ERROR |
-| goal max length | len(goal) <= 500 | VALIDATION_ERROR |
-| dietary_preference valid | halal, vegetarian, vegan, none | VALIDATION_ERROR |
-| budget_aed positive | > 0 | VALIDATION_ERROR |
-| budget_aed max | <= 10000 | VALIDATION_ERROR |
-| household_size range | 1–20 | VALIDATION_ERROR |
-| store_id exists | Must exist in stores table | NOT_FOUND |
-
-### Output sanity checks
-| Check | Rule |
-|-------|------|
-| No non-grocery items | Categories restricted to 8 allowed only |
-| Dietary respected | No non-halal items if dietary_preference=halal |
-| total_aed correct | Must equal SUM(price_aed * quantity) |
-| in_stock consistent | Items in items list must have in_stock=true |
-| At least 1 result | If 0 items found, return empty items with explanation |
-| No negative prices | price_aed > 0 for all items |
-
----
-
-## 5. OUTPUTS
-
-**Success response:**
-```json
-{
-  "items": [
-    {
-      "product_id": "milk_almarai_2l",
-      "product_name": "Almarai Full Fat Milk 2L",
-      "quantity": 2,
-      "price_aed": 12.00,
-      "aisle_ref": "A2",
-      "in_stock": true
-    }
-  ],
-  "total_aed": 287.50,
-  "items_unavailable": [
-    {
-      "product_id": "rice_brown_500g",
-      "product_name": "Brown Rice 500g"
-    }
-  ]
-}
-```
-
----
-
-## 6. ERROR CASES
-
-| Scenario | Error code | retry_suggested |
-|----------|------------|-----------------|
-| Invalid dietary_preference | VALIDATION_ERROR | false |
-| store_id not found | NOT_FOUND | false |
-| AlloyDB connection failed | DB_CONNECTION_ERROR | true |
-| No items found for goal | Returns empty items list | — |
-| budget_aed <= 0 | VALIDATION_ERROR | false |
-| Non-grocery category requested | VALIDATION_ERROR | false |
-
----
-
-## 7. UNIT TESTS
-
-**File:** `tests/unit/aria/test_build_cart.py`
+Source: [tools/aria_tools/build_cart.py](../tools/aria_tools/build_cart.py).
 
 ```python
-# TC-ARIA-03-U01: Happy path — weekly halal cart
-def test_build_cart_weekly_halal():
-    """
-    Given: goal="weekly groceries", dietary="halal", budget=300, household=4
-    When: build_cart called with mock DB returning 12 items
-    Then: Returns items list, total_aed <= 300, all items have in_stock=true
-    """
-
-# TC-ARIA-03-U02: Dietary filter respected — no non-halal items
-def test_build_cart_halal_filter():
-    """
-    Given: dietary_preference="halal"
-    When: build_cart called
-    Then: No item in response has dietary_flags NOT containing "halal"
-    """
-
-# TC-ARIA-03-U03: Unavailable items flagged correctly
-def test_build_cart_unavailable_items():
-    """
-    Given: Brown rice has stock_quantity=0 in mock DB
-    When: build_cart called for weekly groceries
-    Then: Brown rice in items_unavailable, not in items list
-    """
-
-# TC-ARIA-03-U04: total_aed calculation correct
-def test_build_cart_total_calculation():
-    """
-    Given: 3 items at AED 10, AED 20, AED 30 with quantities 1, 2, 1
-    When: build_cart called
-    Then: total_aed = 10 + 40 + 30 = 80.00
-    """
-
-# TC-ARIA-03-U05: Non-grocery goal rejected
-def test_build_cart_non_grocery():
-    """
-    Given: goal="laptop and phone accessories"
-    When: build_cart called
-    Then: Returns VALIDATION_ERROR — non-grocery categories rejected
-    """
-
-# TC-ARIA-03-U06: Store not found
-def test_build_cart_invalid_store():
-    """
-    Given: store_id="nonexistent_store"
-    When: build_cart called
-    Then: Returns NOT_FOUND error
-    """
-
-# TC-ARIA-03-U07: Household size affects quantities
-def test_build_cart_household_quantity():
-    """
-    Given: household_size=1 vs household_size=4 for same goal
-    When: build_cart called twice
-    Then: Quantities higher for household_size=4
-    """
-
-# TC-ARIA-03-U08: Empty store — no items
-def test_build_cart_empty_store():
-    """
-    Given: Store with no inventory
-    When: build_cart called
-    Then: Returns items=[], items_unavailable=[], total_aed=0
-    """
+build_cart(goal: str, dietary_preference: str, budget_aed: float, household_size: int, store_id: str) -> dict
 ```
 
----
+HTTP request model `BuildCartRequest`:
 
-## 8. INTEGRATION TESTS
+- `goal: str` (required)
+- `dietary_preference: str` (required)
+- `budget_aed: float` (required)
+- `household_size: int` (required)
+- `store_id: str` (required)
 
-**File:** `tests/integration/test_aria_tools_integration.py`
+The exact POST route and framework schema are in
+[openapi_aria_tools.yaml](openapi_aria_tools.yaml). Python-only arguments
+are not implicitly accepted over HTTP.
 
-```python
-# TC-ARIA-03-I01: Real DB query builds cart
-def test_build_cart_real_db(db_session):
-    """
-    Given: Inventory seeded with 50 MIRA Retail products
-    When: build_cart queries PostgreSQL container
-    Then: Returns at least 5 items for weekly groceries goal
-    """
+## 3. Processing behavior
 
-# TC-ARIA-03-I02: Dietary filter works on real data
-def test_build_cart_halal_real_db(db_session):
-    """
-    Given: Mix of halal and non-halal products in DB
-    When: build_cart called with dietary_preference=halal
-    Then: All returned items have halal in dietary_flags
-    """
+Classify the goal into supported categories using local rules. Choose a dietary-compatible representative in-stock product per category. Quantity uses a household multiplier: 1 for up to two people, 2 for up to four, 3 above four. Never make a first-item exception to the budget.
 
-# TC-ARIA-03-I03: total_aed matches DB prices
-def test_build_cart_total_matches_db(db_session):
-    """
-    Given: Known prices in seeded inventory
-    When: build_cart called
-    Then: total_aed matches sum of prices from DB
-    """
-```
+## 4. Validation and limits
 
----
+Nonempty goal up to 500 characters; supported diet; budget in (0, 10000]; household 1–20; store inventory must exist. A line must have enough stock for the household quantity and fit the running budget. An unaffordable basket can be empty.
 
-## 9. NON-FUNCTIONAL REQUIREMENTS
+## 5. Response
 
-| Requirement | Specification |
-|-------------|---------------|
-| **Auth** | IAM Bearer token required |
-| **Rate limit** | 30 requests/minute per IP |
-| **Timeout** | AlloyDB query must complete within 5 seconds |
-| **Retry** | On DB timeout: retry up to 3 times with exponential backoff |
-| **Logging** | Log: store_id, dietary_preference, items_returned, total_aed, latency_ms |
-| **Latency SLA** | p95 < 5 seconds (multiple DB queries) |
-| **Category restriction** | Hard-coded allowed list checked before any DB query |
+items, total_aed, items_unavailable. The helper lists a category product as unavailable only when no category candidate has sufficient stock. ARIA separately preserves explicitly requested unavailable originals; it does not fabricate a brown-rice incident.
 
----
+## 6. Persistence and errors
 
-*MIRA Retail · ARC v1.0 · SPEC-ARIA-03 v1.0*
+Use shared adapter interfaces and the storage mode in
+[DATA_MODEL.md](../DATA_MODEL.md). Operational state and incidents have separate
+transaction boundaries. Tools return the standard error dictionary on business
+validation failures; the HTTP wrapper generally retains 200 for that dictionary.
+Request-model failures use 422; tool-router auth/rate limits use 401/429.
+See [AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md) for the agent-facing error mapping.
+
+## 7. Verification
+
+- Existing `test_aria03*` cases in
+  [tests/unit/aria/test_aria_tools.py](../tests/unit/aria/test_aria_tools.py).
+- Cross-surface regressions in
+  [tests/integration/test_demand_loop.py](../tests/integration/test_demand_loop.py).
+- HTTP shape coverage in
+  [tests/contract/test_agent_contract.py](../tests/contract/test_agent_contract.py).
+
+These are local tests, not evidence of a deployed Google integration.

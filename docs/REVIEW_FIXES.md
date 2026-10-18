@@ -1,5 +1,7 @@
 # Review fixes and capability boundaries
 
+Updated October 18, 2026 · Specification 1.1
+
 | Reviewed issue | Change |
 |---|---|
 | Live Google agent execution is unfinished | Explicitly deferred by scope. Live endpoints return a clear 501; local mode is labeled rules, not Gemini. |
@@ -44,3 +46,8 @@ decision. It does not infer causality or invent financial results.
   revenue formulas are scenario assumptions, not measured losses or recovery.
 - Draft PO decisions are reused for 24 hours. Demand action decisions use one
   business-day cycle; newer cycles may require a new manager review.
+
+
+See [ARC_SPEC.md](../ARC_SPEC.md) for product requirements,
+[DATA_MODEL.md](../DATA_MODEL.md) for evidence persistence, and
+[the specification index](../specs/README.md) for interface and workflow details.

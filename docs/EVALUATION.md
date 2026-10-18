@@ -1,5 +1,7 @@
 # Feedback evaluation
 
+Updated October 18, 2026 · Specification 1.1
+
 Run `.venv/bin/python -m scripts.evaluate_demand` from the repository root.
 
 The committed fixture contains **20 curated synthetic English examples** covering
@@ -22,3 +24,8 @@ negation and ambiguity cases, more languages, and per-outcome precision/recall.
 Functional evidence is separate: regression tests exercise checkout, incident
 updates, manager approval, separate-process visibility and subsequent fulfillment.
 The dashboard's before/after counts are observations, not a causal experiment.
+
+
+See [ARC_SPEC.md](../ARC_SPEC.md) for product requirements,
+[DATA_MODEL.md](../DATA_MODEL.md) for evidence persistence, and
+[the specification index](../specs/README.md) for interface and workflow details.

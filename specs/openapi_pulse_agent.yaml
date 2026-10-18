@@ -1,0 +1,187 @@
+# Generated from agents.pulse.main:app.openapi() on 2026-10-18.
+# Runtime versions are preserved; specification narrative is version 1.1.
+# See ../AGENT_CONTRACTS.md for local-mode boundaries and generic response limitations.
+openapi: 3.1.0
+info:
+  title: ARC PULSE Agent
+  version: 1.0.0
+paths:
+  /pulse/analyze:
+    post:
+      summary: Pulse Analyze
+      operationId: pulse_analyze_pulse_analyze_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Pulse Analyze Pulse Analyze Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Health Health Get
+  /pulse/decision:
+    post:
+      summary: Demand Decision
+      operationId: demand_decision_pulse_decision_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemandDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Demand Decision Pulse Decision Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /pulse/discount-decision:
+    post:
+      summary: Discount Decision
+      operationId: discount_decision_pulse_discount_decision_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscountDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Discount Decision Pulse Discount Decision Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AnalyzeRequest:
+      properties:
+        store_id:
+          type: string
+          title: Store Id
+          default: dubai_marina_01
+        hours:
+          type: integer
+          maximum: 168.0
+          minimum: 1.0
+          title: Hours
+          default: 48
+        min_incidents:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Min Incidents
+          default: 5
+      type: object
+      title: AnalyzeRequest
+    DemandDecisionRequest:
+      properties:
+        proposal_key:
+          type: string
+          title: Proposal Key
+        store_id:
+          type: string
+          title: Store Id
+        action:
+          type: string
+          title: Action
+      type: object
+      required:
+      - proposal_key
+      - store_id
+      - action
+      title: DemandDecisionRequest
+    DiscountDecisionRequest:
+      properties:
+        product_id:
+          type: string
+          title: Product Id
+        store_id:
+          type: string
+          title: Store Id
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - product_id
+      - store_id
+      - status
+      title: DiscountDecisionRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

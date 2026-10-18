@@ -15,3 +15,10 @@ The `Real*` Google adapters and ADK Runner execution are deferred. Setting
 similarity and rule-based intent parsing are labeled local behavior, not Gemini.
 
 See [the root README](../README.md) and [review fixes](../docs/REVIEW_FIXES.md).
+
+
+Current tool signatures, HTTP request boundaries and workflow extensions are in
+[specs/README.md](../specs/README.md) and
+[AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md). In particular, ARIA passes the new
+demand evidence to log_session directly in Python; its legacy HTTP request model
+does not yet expose those keyword-only fields.

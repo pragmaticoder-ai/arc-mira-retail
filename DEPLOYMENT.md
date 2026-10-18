@@ -1,312 +1,161 @@
-# DEPLOYMENT.md — Google Cloud Setup & Deploy Guide
-> MIRA Retail · ARC v1.0
+# ARC local operation and cloud integration plan
 
----
+Updated October 18, 2026 · Specification 1.1
 
-## Prerequisites
+## 1. Supported deployment today
 
-- Google Cloud account with billing enabled
-- `gcloud` CLI installed and authenticated
-- Python 3.11+
-- Docker (for local testing)
+The executable prototype runs on one host. It uses deterministic rules and two
+local SQLite databases. Google ADK Runner execution, real Google data/model
+adapters and a production cloud deployment remain unimplemented. This guide does
+not present the old Cloud Run commands as a working deployment recipe.
 
----
+Prerequisites: Python 3.11+, uv, Node 18.17+ and npm. No Google credentials,
+Docker or browser installation are required for the local flow or automated checks.
 
-## 1. Google Cloud project setup
-
-```bash
-# Create project
-gcloud projects create mira-arc-hackathon --name="MIRA Retail ARC"
-gcloud config set project mira-arc-hackathon
-
-# Enable billing (required for AlloyDB)
-# Do this in the Cloud Console: https://console.cloud.google.com/billing
-
-# Enable all required APIs
-gcloud services enable \
-    aiplatform.googleapis.com \
-    alloydb.googleapis.com \
-    bigquery.googleapis.com \
-    bigquerymigration.googleapis.com \
-    bigqueryml.googleapis.com \
-    run.googleapis.com \
-    cloudbuild.googleapis.com \
-    cloudfunctions.googleapis.com \
-    secretmanager.googleapis.com \
-    artifactregistry.googleapis.com \
-    vpcaccess.googleapis.com \
-    servicenetworking.googleapis.com \
-    cloudresourcemanager.googleapis.com
-
-# Set region
-gcloud config set run/region asia-southeast1
-gcloud config set compute/region asia-southeast1
-```
-
----
-
-## 2. IAM service accounts
+From the repository root:
 
 ```bash
-# Create service account for agents
-gcloud iam service-accounts create arc-agent-sa \
-    --display-name="ARC Agent Service Account"
-
-# Create service account for tool functions
-gcloud iam service-accounts create arc-tools-sa \
-    --display-name="ARC Tool Functions Service Account"
-
-# Grant roles to agent SA
-gcloud projects add-iam-policy-binding mira-arc-hackathon \
-    --member="serviceAccount:arc-agent-sa@mira-arc-hackathon.iam.gserviceaccount.com" \
-    --role="roles/aiplatform.user"
-
-gcloud projects add-iam-policy-binding mira-arc-hackathon \
-    --member="serviceAccount:arc-agent-sa@mira-arc-hackathon.iam.gserviceaccount.com" \
-    --role="roles/run.invoker"
-
-# Grant roles to tools SA
-gcloud projects add-iam-policy-binding mira-arc-hackathon \
-    --member="serviceAccount:arc-tools-sa@mira-arc-hackathon.iam.gserviceaccount.com" \
-    --role="roles/bigquery.dataEditor"
-
-gcloud projects add-iam-policy-binding mira-arc-hackathon \
-    --member="serviceAccount:arc-tools-sa@mira-arc-hackathon.iam.gserviceaccount.com" \
-    --role="roles/alloydb.client"
-
-gcloud projects add-iam-policy-binding mira-arc-hackathon \
-    --member="serviceAccount:arc-tools-sa@mira-arc-hackathon.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor"
+uv sync --group dev
+uv pip install -r frontend/pulse-dashboard/requirements.txt
+npm --prefix frontend/aria-app ci
+.venv/bin/python scripts/run_local.py
 ```
 
----
+| Surface | Default URL | Started by launcher? |
+|---|---|---|
+| Storefront | http://localhost:3000 | Yes |
+| ARIA backend | http://127.0.0.1:8001 | Yes |
+| PULSE dashboard | http://localhost:8501 | Yes |
+| Optional PULSE analysis API | Configure a separate port | No |
+| Separate ARIA/PULSE tool HTTP services | Configure separate ports | No |
 
-## 3. Secret Manager
+The launcher binds its services to loopback, sets shared database paths, gives
+Next.js an isolated build/configuration directory, and stops its child process
+groups on Ctrl+C. It does not stop existing servers on occupied ports.
+
+For an independent fresh demo and alternate ports:
 
 ```bash
-# Store AlloyDB password
-echo -n "your-alloydb-password" | \
-    gcloud secrets create alloydb-password --data-file=-
-
-# Store AlloyDB connection details
-echo -n "your-alloydb-host-ip" | \
-    gcloud secrets create alloydb-host --data-file=-
+.venv/bin/python scripts/run_local.py \
+  --data-dir /tmp/arc-demo-02 \
+  --web-port 3100 --aria-port 8002 --pulse-port 8502
 ```
 
----
+Reuse a data directory to preserve prior orders, stock and decisions. Choose a new
+one to seed a fresh scenario without deleting existing data.
 
-## 4. AlloyDB setup
+## 2. Separate-terminal operation
+
+Export the same absolute paths in **each Python process**:
 
 ```bash
-# Create VPC network for AlloyDB (private IP)
-gcloud compute networks create arc-vpc --subnet-mode=auto
-
-# Create AlloyDB cluster
-gcloud alloydb clusters create arc-alloydb-cluster \
-    --region=asia-southeast1 \
-    --password=$(gcloud secrets versions access latest --secret=alloydb-password) \
-    --network=arc-vpc
-
-# Create primary instance
-gcloud alloydb instances create arc-alloydb-primary \
-    --instance-type=PRIMARY \
-    --cpu-count=2 \
-    --region=asia-southeast1 \
-    --cluster=arc-alloydb-cluster
-
-# Get the AlloyDB IP
-gcloud alloydb instances describe arc-alloydb-primary \
-    --cluster=arc-alloydb-cluster \
-    --region=asia-southeast1 \
-    --format="value(ipAddress)"
-
-# Connect and run schema
-# (from Cloud Shell or a VM in the same VPC)
-psql "host=<ALLOYDB_IP> user=postgres dbname=postgres" \
-    -f data/schema/alloydb_schema.sql
-
-# Seed mock data
-psql "host=<ALLOYDB_IP> user=postgres dbname=postgres" \
-    -f data/seed/customer_profiles.sql \
-    -f data/seed/inventory.sql \
-    -f data/seed/promotions.sql \
-    -f data/seed/replenishment.sql
-
-# Generate AlloyDB AI embeddings
-psql "host=<ALLOYDB_IP> user=postgres dbname=postgres" -c "
-UPDATE inventory
-SET embedding = embedding('textembedding-gecko@003',
-    product_name || ' ' || COALESCE(category,'') || ' ' || COALESCE(dietary_flags,''))
-WHERE embedding IS NULL;"
+export USE_MOCK=true
+export ENVIRONMENT=development
+export ARC_STATE_DB=/tmp/arc-manual/operations.sqlite
+export ARC_BRIDGE_DB=/tmp/arc-manual/incidents.sqlite
+export PYTHONPATH="$PWD"
 ```
 
----
-
-## 5. BigQuery setup
+The paths must differ. Start ARIA from the root:
 
 ```bash
-# Create dataset
-bq mk --dataset \
-    --location=asia-southeast1 \
-    --description="ARC analytics bridge for MIRA Retail" \
-    mira-arc-hackathon:arc_dataset
-
-# Create tables
-bq query --use_legacy_sql=false < data/schema/bigquery_schema.sql
-
-# Train BigQuery ML model (after seed data is loaded)
-bq query --use_legacy_sql=false "
-CREATE OR REPLACE MODEL arc_dataset.demand_forecast
-OPTIONS(model_type='ARIMA_PLUS', ...) AS ..."
+.venv/bin/python -m uvicorn agents.aria.main:app --host 127.0.0.1 --port 8001
 ```
 
----
-
-## 6. Artifact Registry
+In another terminal with the same environment:
 
 ```bash
-# Create Docker repository
-gcloud artifacts repositories create arc-registry \
-    --repository-format=docker \
-    --location=asia-southeast1 \
-    --description="ARC container images"
-
-# Authenticate Docker
-gcloud auth configure-docker asia-southeast1-docker.pkg.dev
+.venv/bin/python -m streamlit run frontend/pulse-dashboard/pulse_dashboard.py \
+  --server.address 127.0.0.1 --server.port 8501 --server.headless true
 ```
 
----
-
-## 7. Deploy tool functions
+Start the storefront with the matching upstream URL:
 
 ```bash
-# Build and push tool functions image
-cd tools/
-docker build -t asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-tools:latest .
-docker push asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-tools:latest
-
-# Deploy ARIA tools as Cloud Run service
-gcloud run deploy arc-aria-tools \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-tools:latest \
-    --region=asia-southeast1 \
-    --service-account=arc-tools-sa@mira-arc-hackathon.iam.gserviceaccount.com \
-    --no-allow-unauthenticated \
-    --set-env-vars="AGENT_TYPE=aria"
-
-# Deploy PULSE tools as Cloud Run service
-gcloud run deploy arc-pulse-tools \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-tools:latest \
-    --region=asia-southeast1 \
-    --service-account=arc-tools-sa@mira-arc-hackathon.iam.gserviceaccount.com \
-    --no-allow-unauthenticated \
-    --set-env-vars="AGENT_TYPE=pulse"
+ARIA_AGENT_URL=http://127.0.0.1:8001 npm --prefix frontend/aria-app run dev
 ```
 
----
+Backend settings read process environment at import time; restart Python services
+after changing it. Copying `.env.example` does not by itself load a root `.env`
+into Python. Next.js can read its own `.env.local`; the launcher supplies process
+environment directly. PULSE calls tools directly; PULSE_AGENT_URL is unused.
 
-## 8. Deploy agents
+Optional HTTP services, in separate terminals with the shared environment:
 
 ```bash
-# Deploy ARIA agent
-cd agents/aria/
-gcloud run deploy arc-aria-agent \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-aria:latest \
-    --region=asia-southeast1 \
-    --service-account=arc-agent-sa@mira-arc-hackathon.iam.gserviceaccount.com \
-    --no-allow-unauthenticated
-
-# Deploy PULSE agent
-cd agents/pulse/
-gcloud run deploy arc-pulse-agent \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-pulse:latest \
-    --region=asia-southeast1 \
-    --service-account=arc-agent-sa@mira-arc-hackathon.iam.gserviceaccount.com \
-    --no-allow-unauthenticated
+.venv/bin/python -m uvicorn agents.pulse.main:app --host 127.0.0.1 --port 8005
+.venv/bin/python -m uvicorn tools.aria_tools.main:app --host 127.0.0.1 --port 8003
+.venv/bin/python -m uvicorn tools.pulse_tools.main:app --host 127.0.0.1 --port 8004
 ```
 
----
+These are separate applications; their `/health` and `/openapi.json` routes refer
+to the particular service. They are not additional requirements for the dashboard.
 
-## 9. Deploy frontends
+## 3. Environment reference
 
-### ARIA customer app (Next.js)
-```bash
-cd frontend/aria-app/
+| Variable | Default / interpretation |
+|---|---|
+| USE_MOCK | true; false selects deferred Google paths, not a working live service |
+| ENVIRONMENT | development; tool IAM verification is bypassed locally |
+| ARC_STATE_DB | Unset → memory; if only ARC_BRIDGE_DB is set, its path plus .state |
+| ARC_BRIDGE_DB | Unset → memory; otherwise persistent local incident database |
+| ARIA_AGENT_URL | Next.js default http://127.0.0.1:8001 |
+| ARIA_AGENT_TOKEN | Optional server-side bearer token forwarded to ARIA; not an automatic token-refresh system |
+| ARIA_REQUEST_TIMEOUT_MS | 15000 for the Next.js upstream request |
+| DEFAULT_CUSTOMER_ID / DEFAULT_STORE_ID | Proxy defaults sarah_123 / dubai_marina_01; the current storefront explicitly sends its selected store and demo customer |
+| PULSE_STORE_ID | Default store for provider calls; the UI passes its selected store explicitly |
+| PULSE_REFRESH_SECONDS | 10; a nonpositive value disables timed fragment reruns |
+| DEMO_DATE | Optional ISO business date for expiry/promotion/proposal calculations; actual timestamps still use wall clock |
+| MOCK_SERVER_URL | Optional simulated generation/embedding HTTP calls; not a bridge-storage selector |
+| ARC_NEXT_DIST_DIR / ARC_TSCONFIG_PATH | Optional Next.js isolation; set by the local launcher |
+| GOOGLE_CLOUD_*, ALLOYDB_*, BIGQUERY_*, GEMINI_*, EMBEDDING_* | Deferred integration configuration; current defaults are placeholders, not verified model recommendations |
 
-# Build Next.js Docker image
-docker build -t asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-aria-app:latest .
-docker push asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-aria-app:latest
-
-# Deploy to Cloud Run
-gcloud run deploy arc-aria-app \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-aria-app:latest \
-    --region=asia-southeast1 \
-    --allow-unauthenticated \
-    --set-env-vars="ARIA_AGENT_URL=https://arc-aria-agent-xxxx-as.a.run.app"
-```
-
-### PULSE manager dashboard (Streamlit)
-```bash
-cd frontend/pulse-dashboard/
-
-docker build -t asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-pulse-dashboard:latest .
-docker push asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-pulse-dashboard:latest
-
-gcloud run deploy arc-pulse-dashboard \
-    --image=asia-southeast1-docker.pkg.dev/mira-arc-hackathon/arc-registry/arc-pulse-dashboard:latest \
-    --region=asia-southeast1 \
-    --allow-unauthenticated \
-    --set-env-vars="PULSE_AGENT_URL=https://arc-pulse-agent-xxxx-as.a.run.app"
-```
-
----
-
-## 10. Local development
+## 4. Validate before recording a demo
 
 ```bash
-# Run ARIA agent locally with ADK dev server
-cd agents/aria
-adk web .
-# Opens http://localhost:8000
-
-# Run PULSE agent locally
-cd agents/pulse
-adk web .
-# Opens http://localhost:8001
-
-# Run Streamlit frontends locally
-streamlit run frontend/aria_chat.py --server.port 8501
-streamlit run frontend/pulse_dashboard.py --server.port 8502
+.venv/bin/python -m pytest
+.venv/bin/ruff check agents tools frontend/pulse-dashboard scripts tests
+.venv/bin/mypy agents tools frontend/pulse-dashboard/data_provider.py
+.venv/bin/python -m scripts.evaluate_demand
+npm --prefix frontend/aria-app run build
 ```
 
----
+The Python suite uses memory/temp SQLite and separate child processes, not cloud
+services or a BigQuery emulator. Dashboard tests use Streamlit AppTest when the
+separate dashboard dependency is installed. See [docs/DEMO.md](docs/DEMO.md) for
+the demonstration and [docs/EVALUATION.md](docs/EVALUATION.md) for measured limits.
 
-## 11. Environment variables reference
+## 5. Troubleshooting
 
-```env
-# Google Cloud
-GOOGLE_CLOUD_PROJECT=mira-arc-hackathon
-GOOGLE_CLOUD_REGION=asia-southeast1
+| Symptom | Check |
+|---|---|
+| Storefront says ARIA unavailable | ARIA process and ARIA_AGENT_URL; do not expect a scripted success fallback |
+| Dashboard changes do not reach the store | Identical absolute storage paths in both Python processes; restart after env changes |
+| PULSE shows process-memory warning | Shared SQLite paths are unset |
+| Existing demo starts with approved actions | Reused state is intentional; use a fresh data directory for a clean scenario |
+| Ports already occupied | Pass alternate launcher ports; leave existing servers running |
+| Quote returns without placing an order | Basket or prices changed, or quote ID is missing; review and confirm the replacement quote |
+| USE_MOCK=false fails | Google execution/adapters are deferred; use local mode for this branch |
 
-# AlloyDB (fetched from Secret Manager in production)
-ALLOYDB_HOST=<private-ip>
-ALLOYDB_PORT=5432
-ALLOYDB_DATABASE=postgres
-ALLOYDB_USER=postgres
+## 6. Planned Google Cloud rollout
 
-# BigQuery
-BIGQUERY_DATASET=arc_dataset
-BIGQUERY_LOCATION=asia-southeast1
+Before publishing an actual cloud prototype:
 
-# Vertex AI
-VERTEX_AI_LOCATION=asia-southeast1
-GEMINI_PRO_MODEL=gemini-1.5-pro
-GEMINI_FLASH_MODEL=gemini-1.5-flash-001
+1. Implement an ADK execution/session path and validate structured model output
+   against the current cart, evidence and decision contracts.
+2. Implement managed operational storage with atomic checkout and durable
+   idempotency; migrate sessions, quotes and manager decisions, not just inventory.
+3. Implement outbox-backed incident delivery and BigQuery upsert/deduplication.
+   Migrate existing tables explicitly for the new evidence/lifecycle fields.
+4. Replace or clearly retain the synthetic forecast/velocity assumptions; evaluate
+   predictions before presenting confidence as a measured statistic.
+5. Add application authentication/authorization, verified identity audiences,
+   managed credentials and token renewal. Local demo login is not that integration.
+6. Package each service and verify actual deployment entry points, health/readiness,
+   data connectivity, persistence across instances and the complete feedback loop.
+7. Validate the demo and submission artifacts against current event requirements.
 
-# Cloud Run service URLs (set after deploy)
-ARIA_TOOLS_URL=https://arc-aria-tools-xxxx-as.a.run.app
-PULSE_TOOLS_URL=https://arc-pulse-tools-xxxx-as.a.run.app
-```
-
----
-
-*MIRA Retail · ARC v1.0 · Deployment v1.0*
+AlloyDB/BigQuery SQL in `data/schema` and ADK bindings/prompts are starting assets.
+They do not establish deployed infrastructure. Local SQLite cannot be shared by
+independent Cloud Run instances. Supplier delivery, logistics execution and
+payments require their own integrations and remain outside the local simulation.

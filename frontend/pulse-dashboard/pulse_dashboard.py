@@ -36,7 +36,7 @@ def unmet_demand(store: str, hours: int) -> None:
             for col, label, value in zip(cols, ["Temporary compromises", "Rejected / abandoned", "Satisfied alternatives", "Original need fulfilled"],
                                          [counts["compromise"], counts["rejected"] + counts["abandoned"], counts["satisfied"], counts["fulfilled"]]):
                 col.metric(label, value)
-            st.caption(f"{insight['synthetic_sessions']} synthetic seed sessions; other evidence comes from local shopper sessions. Unknown outcomes are excluded from explicit unmet-demand totals.")
+            st.caption(f"{insight['synthetic_sessions']} synthetic seed sessions; other evidence comes from shopper sessions. Unknown outcomes are excluded from explicit unmet-demand totals.")
             with st.expander("Customer evidence"):
                 for event in insight["evidence"]:
                     st.write(f"**{event['outcome']}** · {event['evidence'] or 'No explicit statement'}")
@@ -109,12 +109,24 @@ def main() -> None:
     st.caption(f"{data.source_label()} · Refreshed {now():%H:%M:%S %Z}")
     if not data.is_live():
         st.warning("Cross-app persistence is not configured. Start both apps with scripts/run_local.py for the complete loop.")
-    st.caption("Local deterministic prototype. Google model and cloud SDK execution are not integrated.")
+    if data.settings.use_mock:
+        st.caption("Offline fixture mode: deterministic rules and sample evidence.")
+    else:
+        st.caption("Google-backed data. Proposals require manager approval; forecasts need sufficient history.")
     with st.sidebar:
         store = st.selectbox("Store", list(STORES), format_func=lambda sid: STORES[sid])
         hours = st.selectbox("Period (hours)", [48, 168])
         if st.button("Refresh now"):
             st.rerun()
+    if not data.settings.use_mock:
+        if st.button("Generate Google analysis"):
+            with st.spinner("Analyzing store evidence..."):
+                try:
+                    st.session_state[f"summary_{store}_{hours}"] = data.google_summary(store, hours)
+                except Exception:
+                    st.error("Google analysis failed. Check the PULSE API logs and model access.")
+        if st.session_state.get(f"summary_{store}_{hours}"):
+            st.info(st.session_state[f"summary_{store}_{hours}"])
     @st.fragment(run_every=REFRESH_SECONDS if REFRESH_SECONDS > 0 else None)
     def live_view():
         metrics = data.summary_metrics(store, hours)

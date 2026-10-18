@@ -1,16 +1,15 @@
 -- ════════════════════════════════════════════════════════════════════
 -- ARC — AlloyDB schema (operational data)
 -- Source of truth: DATA_MODEL.md §1
--- AlloyDB is PostgreSQL-compatible. The vector/ScaNN lines are AlloyDB AI
--- specific; strip them for plain Postgres (see tests/conftest.py note).
+-- Compatible with Cloud SQL PostgreSQL and AlloyDB with pgvector enabled.
 -- ════════════════════════════════════════════════════════════════════
 
 -- ── Extensions ──────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS google_ml_integration;
+-- Gemini embeddings are generated through the Google Gen AI SDK.
 
 -- ── Stores ──────────────────────────────────────────────────────────
-CREATE TABLE stores (
+CREATE TABLE IF NOT EXISTS stores (
     store_id        VARCHAR(50) PRIMARY KEY,
     store_name      VARCHAR(200) NOT NULL,
     area            VARCHAR(100),
@@ -20,7 +19,7 @@ CREATE TABLE stores (
 );
 
 -- ── Customer profiles ───────────────────────────────────────────────
-CREATE TABLE customer_profiles (
+CREATE TABLE IF NOT EXISTS customer_profiles (
     customer_id         VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(100) NOT NULL,
     email               VARCHAR(100) UNIQUE,
@@ -35,16 +34,16 @@ CREATE TABLE customer_profiles (
 );
 
 -- ── Suppliers ───────────────────────────────────────────────────────
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
     supplier_id     VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
     supplier_name   VARCHAR(200) NOT NULL,
     contact_email   VARCHAR(100),
     lead_time_days  INTEGER DEFAULT 2
 );
 
--- ── Inventory (with AlloyDB AI vector embeddings) ───────────────────
-CREATE TABLE inventory (
-    product_id          VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+-- ── Inventory (with Google text embeddings) ───────────────────
+CREATE TABLE IF NOT EXISTS inventory (
+    product_id          VARCHAR(36) NOT NULL,
     product_name        VARCHAR(200) NOT NULL,
     category            VARCHAR(100),
     brand               VARCHAR(100),
@@ -60,16 +59,17 @@ CREATE TABLE inventory (
     expiry_date         DATE,
     discount_active     BOOLEAN DEFAULT false,
     discount_pct        DECIMAL(5,2),
-    embedding           vector(768),    -- AlloyDB AI: ScaNN semantic search
-    updated_at          TIMESTAMP DEFAULT NOW()
+    embedding           vector(768),    -- Google embeddings; exact cosine search
+    updated_at          TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (product_id, store_id)
 );
 
-CREATE INDEX ON inventory USING scann(embedding cosine) WITH (num_leaves=10);
-CREATE INDEX ON inventory(store_id, category);
-CREATE INDEX ON inventory(store_id, stock_quantity);
+-- Exact pgvector search is sufficient for this catalog; no ScaNN dependency.
+CREATE INDEX IF NOT EXISTS idx_inventory_store_id_category ON inventory(store_id, category);
+CREATE INDEX IF NOT EXISTS idx_inventory_store_id_stock_quantity ON inventory(store_id, stock_quantity);
 
 -- ── Orders ──────────────────────────────────────────────────────────
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
     order_id                VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_id             VARCHAR(36) NOT NULL REFERENCES customer_profiles(customer_id),
     store_id                VARCHAR(50) NOT NULL REFERENCES stores(store_id),
@@ -85,11 +85,11 @@ CREATE TABLE orders (
     created_at              TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX ON orders(customer_id);
-CREATE INDEX ON orders(store_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_store_id_created_at ON orders(store_id, created_at);
 
 -- ── Promotions ──────────────────────────────────────────────────────
-CREATE TABLE promotions (
+CREATE TABLE IF NOT EXISTS promotions (
     promotion_id        VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(200) NOT NULL,
     description         TEXT,
@@ -106,10 +106,10 @@ CREATE TABLE promotions (
 );
 
 -- ── Replenishment schedules ─────────────────────────────────────────
-CREATE TABLE replenishment_schedule (
+CREATE TABLE IF NOT EXISTS replenishment_schedule (
     schedule_id             VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
     store_id                VARCHAR(50) NOT NULL REFERENCES stores(store_id),
-    product_id              VARCHAR(36) NOT NULL REFERENCES inventory(product_id),
+    product_id              VARCHAR(36) NOT NULL,
     supplier_id             VARCHAR(36) REFERENCES suppliers(supplier_id),
     delivery_day            VARCHAR(20),    -- Monday, Tuesday...
     delivery_time           TIME,
@@ -119,9 +119,9 @@ CREATE TABLE replenishment_schedule (
 );
 
 -- ── Purchase orders (PULSE creates, manager approves) ───────────────
-CREATE TABLE purchase_orders (
+CREATE TABLE IF NOT EXISTS purchase_orders (
     po_id               VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id          VARCHAR(36) NOT NULL REFERENCES inventory(product_id),
+    product_id          VARCHAR(36) NOT NULL,
     store_id            VARCHAR(50) NOT NULL REFERENCES stores(store_id),
     supplier_id         VARCHAR(36) REFERENCES suppliers(supplier_id),
     quantity            INTEGER NOT NULL,
@@ -138,5 +138,14 @@ CREATE TABLE purchase_orders (
     reviewed_by         VARCHAR(100)
 );
 
-CREATE INDEX ON purchase_orders(store_id, status);
-CREATE INDEX ON purchase_orders(product_id, status);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_store_id_status ON purchase_orders(store_id, status);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_product_id_status ON purchase_orders(product_id, status);
+
+-- Runtime documents: one record per session, order, PO, or manager decision.
+-- Inventory and customer profiles above remain authoritative SQL tables.
+CREATE TABLE IF NOT EXISTS arc_records (
+    entity TEXT NOT NULL CHECK (entity IN ('sessions','orders','purchase_orders','decisions')),
+    key TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    PRIMARY KEY (entity, key)
+);

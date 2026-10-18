@@ -15,4 +15,4 @@ cloud_sql_tier = "db-f1-micro"
 cloud_run_min_instances = 0 # Scale to 0 when idle to prevent costs
 cloud_run_max_instances = 3
 deploy_cloud_run_services = true
-use_mock                = true # Set to false once live database is seeded
+use_mock                = false # Initialize database and embeddings before starting apps

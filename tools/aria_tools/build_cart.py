@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
+from tools.shared.dietary import matches_diet
 from tools.shared.errors import error
 from tools.shared.llm import ALLOWED_CATEGORIES, get_llm
 from tools.shared.logger import get_logger
@@ -72,7 +73,7 @@ def build_cart(
     for cat in categories:
         cat_products = [p for p in inv if p["category"] == cat]
         if dietary_preference != "none":
-            cat_products = [p for p in cat_products if dietary_preference in p["dietary_flags"]]
+            cat_products = [p for p in cat_products if matches_diet(p, dietary_preference)]
         if not cat_products:
             continue
         cat_products.sort(key=lambda p: p["price_aed"])

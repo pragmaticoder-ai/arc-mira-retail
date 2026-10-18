@@ -83,7 +83,7 @@ variable "deploy_cloud_run_services" {
 }
 
 variable "use_mock" {
-  description = "Default USE_MOCK flag for Cloud Run services. Set to true for initial deployment before wiring live AlloyDB credentials."
+  description = "Explicit offline fixture flag. Real Google services are the default."
   type        = bool
-  default     = true
+  default     = false
 }

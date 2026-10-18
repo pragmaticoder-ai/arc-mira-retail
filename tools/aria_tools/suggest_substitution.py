@@ -23,6 +23,7 @@ from tools.shared.embeddings import product_document
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
 from tools.shared.rate_limit import limiter
+from tools.shared.settings import settings
 from tools.shared.vector_search import get_vector_search
 
 logger = get_logger("aria.suggest_substitution")
@@ -130,6 +131,19 @@ def suggest_substitution(
 
     relevant.sort(key=_rank_score, reverse=True)
     best = relevant[0]
+    verified_reason = None
+    if not settings.use_mock:
+        from tools.shared.substitution_match import choose_substitute
+
+        try:
+            match = choose_substitute(original, relevant)
+        except Exception:
+            return error("UPSTREAM_ERROR", "Google could not verify a suitable substitute; please retry", True)
+        if match.product_id is None:
+            event = get_bigquery().record_substitution_gap(product_id=product_id, store_id=store_id)
+            return _null_result("No functionally equivalent in-stock substitute found", event)
+        best = next(c for c in relevant if c["product_id"] == match.product_id)
+        verified_reason = match.explanation
 
     in_band = band_floor <= best["price_aed"] <= band_ceiling
     from_history = best["product_id"] in history
@@ -147,6 +161,9 @@ def suggest_substitution(
         )
         if from_history:
             reason += " (you've bought this before)"
+
+    if verified_reason:
+        reason = verified_reason + (" Outside the original price range." if not in_band else "")
 
     score = max(0.0, min(1.0, best["similarity_score"]))
     result = {

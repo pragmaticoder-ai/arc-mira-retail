@@ -2,17 +2,20 @@
 
 Updated October 18, 2026 · Matches product specification 1.1.
 
+For the Google-backed local setup, see [LOCAL_GOOGLE.md](LOCAL_GOOGLE.md).
+The recording sequence below is the explicit offline fixture scenario.
+
 ## Preparation
 
 From the repository root, start a fresh independent scenario:
 
 ```bash
-.venv/bin/python scripts/run_local.py --data-dir /tmp/arc-recording-01
+.venv/bin/python scripts/run_local.py --offline --data-dir /tmp/arc-recording-01
 ```
 
 Choose another unused directory for a second take; reusing one retains prior
 orders, stock, discounts and approvals. If the usual ports are occupied, add
-`--web-port 3100 --aria-port 8002 --pulse-port 8502` and open those URLs.
+`--web-port 3100 --aria-port 8101 --pulse-api-port 8102 --pulse-port 8502` and open those URLs.
 Do not stop another running demo to free its ports.
 
 Open the store and manager dashboard. Explain upfront that this branch runs

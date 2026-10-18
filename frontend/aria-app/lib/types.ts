@@ -17,6 +17,12 @@ export type Category =
 
 // ── inventory table (DATA_MODEL.md §1) ──────────────────────────────
 export interface Product {
+  image_url?: string | null
+  images?: string[]
+  description?: string
+  attributes?: Record<string, string>
+  unit_type?: string
+  source_category?: string
   product_id: string
   product_name: string
   category: Category
@@ -132,6 +138,7 @@ export interface SubstitutionOffer {
   outcome: string
 }
 export interface AriaChatResponse {
+  cart_changed?: boolean
   session_id: string
   quote_id: string | null
   demand_signals: DemandSignal[]
@@ -151,4 +158,15 @@ export interface ChatMessage {
   text: string
   reasoning?: ReasoningStep[]
   thinking?: boolean
+}
+
+export type CatalogFacets = Record<string, { value: string; count: number }[]>
+export interface CatalogPage {
+  items: Product[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  facets: CatalogFacets
+  price_range: { min: number; max: number }
 }

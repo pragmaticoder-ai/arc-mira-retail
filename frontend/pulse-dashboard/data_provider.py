@@ -20,10 +20,12 @@ STORE_ID = os.getenv("PULSE_STORE_ID", "dubai_marina_01")
 
 
 def is_live() -> bool:
-    return bool(settings.arc_state_db and settings.arc_bridge_db)
+    return not settings.use_mock or bool(settings.arc_state_db and settings.arc_bridge_db)
 
 
 def source_label() -> str:
+    if not settings.use_mock:
+        return "GOOGLE CLOUD · POSTGRESQL + BIGQUERY"
     return "SHARED LOCAL DATA · RULES" if is_live() else "PROCESS MEMORY · RULES"
 
 
@@ -73,3 +75,12 @@ def approve_po(po_id: str) -> dict:
 
 def reject_po(po_id: str) -> dict:
     return get_alloydb().decide_purchase_order(po_id, "rejected")
+
+
+def google_summary(store_id: str, hours: int) -> str:
+    import httpx
+
+    response = httpx.post(os.getenv("PULSE_AGENT_URL", "http://127.0.0.1:8002") + "/pulse/analyze",
+                          json={"store_id": store_id, "hours": hours}, timeout=120)
+    response.raise_for_status()
+    return response.json()["summary"]

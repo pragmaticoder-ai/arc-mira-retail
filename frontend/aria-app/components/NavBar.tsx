@@ -6,14 +6,17 @@
 
 import { MiraLogo } from '@/components/MiraLogo'
 import { useCart } from '@/context/CartContext'
-import { MOCK_STORES } from '@/lib/mockData'
+import type { Store } from '@/lib/types'
 
 interface NavBarProps {
+  search: string
+  onSearch: (value: string) => void
+  stores: Store[]
   storeId: string
   onStoreChange: (storeId: string) => void
 }
 
-export function NavBar({ storeId, onStoreChange }: NavBarProps) {
+export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: NavBarProps) {
   const { itemCount } = useCart()
 
   return (
@@ -36,9 +39,11 @@ export function NavBar({ storeId, onStoreChange }: NavBarProps) {
       <div className="flex items-center gap-sm">
         <input
           type="search"
+          value={search}
+          onChange={e => onSearch(e.target.value)}
           placeholder="Search groceries"
           aria-label="Search groceries"
-          className="hidden w-56 rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-mira-600 sm:block"
+          className="w-32 sm:w-56 rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-mira-600 sm:block"
         />
         <select
           value={storeId}
@@ -46,7 +51,7 @@ export function NavBar({ storeId, onStoreChange }: NavBarProps) {
           aria-label="Select store"
           className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-mira-600"
         >
-          {MOCK_STORES.map((s) => (
+          {stores.map((s) => (
             <option key={s.store_id} value={s.store_id}>
               {s.store_name}
             </option>

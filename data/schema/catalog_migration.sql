@@ -1,0 +1,20 @@
+-- Additive migration: existing sample stock, orders and approvals are preserved.
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS images JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS attributes JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_attributes JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retailer TEXT;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_id TEXT;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_sku TEXT;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_url TEXT;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'AED';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS price_captured_at TIMESTAMPTZ;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_stock_quantity INTEGER;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_available BOOLEAN;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS inventory_origin TEXT NOT NULL DEFAULT 'sample';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS unit_type TEXT NOT NULL DEFAULT 'qty';
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_category TEXT;
+CREATE INDEX IF NOT EXISTS idx_inventory_attributes ON inventory USING gin(attributes);
+CREATE INDEX IF NOT EXISTS idx_inventory_name_search ON inventory USING gin(to_tsvector('english', product_name));
+CREATE INDEX IF NOT EXISTS idx_inventory_store_price ON inventory(store_id, price_aed, product_id);

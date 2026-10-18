@@ -23,6 +23,7 @@ from tools.pulse_tools.draft_purchase_order import draft_purchase_order
 from tools.pulse_tools.execute_perishable_discount import execute_perishable_discount
 from tools.pulse_tools.find_root_cause import find_root_cause
 from tools.pulse_tools.predict_stockout import predict_stockout
+from tools.shared.errors import is_error
 from tools.shared.logger import get_logger
 from tools.shared.settings import settings
 
@@ -43,6 +44,8 @@ def _cycle(req: AnalyzeRequest) -> dict:
     for p in patterns:
         rc = find_root_cause(p["product_id"], req.store_id, p["peak_hour"],
                              p["incident_count"], p["period_hours"])
+        if is_error(rc):
+            continue
         pred = predict_stockout(p["product_id"], req.store_id)
         impact = calculate_impact(p["product_id"], req.store_id, p["incident_count"],
                                   p["average_cart_aed"], p["abandonment_count"], 2)
@@ -65,14 +68,20 @@ def _cycle(req: AnalyzeRequest) -> dict:
                 perishable=len(perishable), status="success")
     return {"stockout_alerts": alerts, "perishable_alerts": perishable,
             "demand_insights": demand_insights(req.store_id, req.hours),
-            "mode": "local_rules", "estimates": "Illustrative modeled revenue, not measured sales recovery"}
+            "mode": "local_rules" if settings.use_mock else "google", "estimates": "Illustrative modeled revenue, not measured sales recovery"}
 
 
 @app.post("/pulse/analyze")
-async def pulse_analyze(req: AnalyzeRequest) -> dict:
-    if settings.use_mock:
-        return _cycle(req)
-    raise HTTPException(501, "Google ADK execution is not integrated. Use USE_MOCK=true.")
+def pulse_analyze(req: AnalyzeRequest) -> dict:
+    report = _cycle(req)
+    if not settings.use_mock:
+        from agents.google_runtime import summarize_operations
+
+        try:
+            report["summary"] = summarize_operations(report)
+        except Exception as exc:
+            raise HTTPException(502, "Google operations analyst failed; check model access and server logs") from exc
+    return report
 
 
 @app.get("/health")

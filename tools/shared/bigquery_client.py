@@ -12,6 +12,7 @@ a canned prediction in mock mode (real impl TODO calls BigQuery ML).
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import sqlite3
@@ -293,6 +294,7 @@ class RealBigQueryClient(BigQueryClient):
             project=settings.google_cloud_project,
             location=settings.bigquery_location,
         )
+        self._incident_cache: dict[str, tuple[datetime, list[dict]]] = {}
         self.dataset_id = settings.bigquery_dataset
         self.table_ref = f"{settings.google_cloud_project}.{self.dataset_id}.incidents"
 
@@ -318,14 +320,47 @@ class RealBigQueryClient(BigQueryClient):
             "order_placed": bool(incident.get("order_placed", False)),
             "abandonment_reason": incident.get("abandonment_reason"),
         }
-        errors = self.client.insert_rows_json(self.table_ref, [row])
-        if errors:
-            raise RuntimeError(f"BigQuery streaming insert failed: {errors}")
+        from google.cloud import bigquery
+
+        # DML upsert preserves one current row per session and is immediately
+        # queryable. Streaming insert IDs do not deduplicate changed feedback.
+        strings = {"customer_id", "store_id", "session_status", "promotion_id",
+                   "session_sentiment", "abandonment_reason"}
+        arrays = {"items_ordered", "items_unavailable", "demand_signals", "requested_items", "substitutions_offered"}
+        expressions = {}
+        for key, value in row.items():
+            if key == "session_id":
+                expressions[key] = "S.session_id"
+            elif key in arrays:
+                # row's JSON columns are serialized strings for the SDK.
+                row[key] = json.loads(value)
+                expressions[key] = f"JSON_QUERY(S.payload, '$.{key}')"
+            elif key in strings:
+                expressions[key] = f"JSON_VALUE(S.payload, '$.{key}')"
+            else:
+                kind = "TIMESTAMP" if key == "timestamp" else "BOOL" if key == "order_placed" else "FLOAT64"
+                expressions[key] = f"SAFE_CAST(JSON_VALUE(S.payload, '$.{key}') AS {kind})"
+        columns = list(expressions)
+        update = ", ".join(f"{k}={expressions[k]}" for k in columns if k not in {"session_id", "timestamp"})
+        query = f"""MERGE `{self.table_ref}` T
+            USING (SELECT @sid session_id, PARSE_JSON(@payload) payload) S
+            ON T.session_id=S.session_id
+            WHEN MATCHED THEN UPDATE SET {update}
+            WHEN NOT MATCHED THEN INSERT ({', '.join(columns)})
+            VALUES ({', '.join(expressions.values())})"""
+        config = bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("sid", "STRING", sid),
+            bigquery.ScalarQueryParameter("payload", "STRING", json.dumps(row))])
+        self.client.query(query, job_config=config).result()
+        self._incident_cache.pop(incident.get("store_id", ""), None)
         return {"session_id": sid, "logged": True, "timestamp": ts}
 
     def list_incidents(self, store_id: str) -> list[dict]:
         from google.cloud import bigquery
 
+        cached = self._incident_cache.get(store_id)
+        if cached and (now() - cached[0]).total_seconds() < 5:
+            return copy.deepcopy(cached[1])
         query = f"""
             SELECT session_id, customer_id, store_id, timestamp,
                    items_ordered, items_unavailable, demand_signals, requested_items,
@@ -333,6 +368,7 @@ class RealBigQueryClient(BigQueryClient):
                    cart_total_aed, budget_aed, session_sentiment, order_placed, abandonment_reason
             FROM `{self.table_ref}`
             WHERE store_id = @store_id
+              AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
             ORDER BY timestamp DESC
         """
         job_config = bigquery.QueryJobConfig(
@@ -352,6 +388,7 @@ class RealBigQueryClient(BigQueryClient):
             if d.get("timestamp"):
                 d["timestamp"] = d["timestamp"].isoformat()
             incidents.append(d)
+        self._incident_cache[store_id] = (now(), copy.deepcopy(incidents))
         return incidents
 
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
@@ -359,36 +396,38 @@ class RealBigQueryClient(BigQueryClient):
         return _aggregate_patterns(incidents, store_id=store_id, hours=hours, min_incidents=min_incidents)
 
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
-        from google.cloud import bigquery
+        from tools.shared.alloydb_client import get_alloydb
 
-        query = f"""
-            SELECT * FROM ML.FORECAST(
-                MODEL `{settings.google_cloud_project}.{self.dataset_id}.demand_forecast`,
-                STRUCT({forecast_days} AS horizon)
-            )
-            WHERE product_id = @product_id
-        """
-        try:
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[bigquery.ScalarQueryParameter("product_id", "STRING", product_id)]
-            )
-            rows = list(self.client.query(query, job_config=job_config))
-            if rows:
-                return _local_forecast(product_id, store_id, forecast_days)
-        except Exception:
-            pass
-        return _local_forecast(product_id, store_id, forecast_days)
+        product = get_alloydb().get_product_at_store(product_id, store_id)
+        stock = product["stock_quantity"] if product else 0
+        rate = self.get_daily_sales_rate(product_id=product_id, store_id=store_id)
+        return {"confidence": 0.0, "predicted_stockout_date": None,
+                "days_until_stockout": None, "current_stock": stock,
+                "daily_consumption_rate": rate,
+                "evidence": "Observed confirmed-order units over 7 days; no trained stockout model. Date suppressed."}
 
     def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
-        rates = {
-            "laban_almarai_1l": 8.5,
-            "milk_almarai_2l": 12.0,
-            "bread_white_loaf": 15.0,
-            "croissant_4pk": 5.0,
-        }
-        return rates.get(product_id, 3.0)
+        cutoff = now() - timedelta(days=days)
+        total = 0
+        for row in self.list_incidents(store_id):
+            stamp = datetime.fromisoformat(row["timestamp"])
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=now().tzinfo)
+            if row.get("order_placed") and cutoff <= stamp <= now():
+                total += sum(int(i.get("quantity", 0)) for i in row.get("items_ordered", [])
+                             if i.get("product_id") == product_id)
+        return total / days
 
     def record_substitution_gap(self, *, product_id: str, store_id: str) -> str:
+        from tools.shared.alloydb_client import get_alloydb
+
+        db = get_alloydb()
+        key = f"substitution_gap:{store_id}:{product_id}"
+        with db.transaction():
+            if db.get_decision(key):
+                return "recurring"
+            db.save_decision(key, {"status": "observed", "product_id": product_id,
+                                   "store_id": store_id, "kind": "substitution_gap"})
         return "new"
 
 

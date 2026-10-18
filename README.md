@@ -53,10 +53,21 @@ existing data:
 If the usual ports are occupied, pass `--web-port 3100 --aria-port 8002
 --pulse-port 8502`. Each launcher uses an isolated Next.js build directory.
 
-For separate terminals, export the same **absolute** `ARC_BRIDGE_DB` and
-`ARC_STATE_DB` paths in each Python service, set `USE_MOCK=true`, and set the
-Next.js `ARIA_AGENT_URL` to the ARIA service URL. Never use the same SQLite file
-for both databases: their transactions use separate connections.
+For separate terminals, run this common environment block from the repository
+root in **each Python service terminal**:
+
+```bash
+export USE_MOCK=true
+export ENVIRONMENT=development
+export ARC_STATE_DB=/tmp/arc-manual/operations.sqlite
+export ARC_BRIDGE_DB=/tmp/arc-manual/incidents.sqlite
+export PYTHONPATH="$PWD"
+```
+
+Then use the per-service commands in [DEPLOYMENT.md](DEPLOYMENT.md). Set the
+Next.js `ARIA_AGENT_URL` to the ARIA service URL. Use the same absolute paths
+across services, but never use one file for both databases: their transactions
+use separate connections. A root `.env` is not automatically loaded by Python.
 
 ## Try the distinguishing workflow
 

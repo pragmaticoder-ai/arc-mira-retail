@@ -5,7 +5,7 @@ Updated October 18, 2026 · Specification 1.1
 | Reviewed issue | Change |
 |---|---|
 | Live Google agent execution is unfinished | Explicitly deferred by scope. Live endpoints return a clear 501; local mode is labeled rules, not Gemini. |
-| Storefront invents orders and bridge writes | Removed the scripted response module. Storefront calls ARIA; all session transitions upsert real local incident rows. |
+| Storefront invents orders and bridge writes | Removed the scripted response module. Storefront calls ARIA; cart-building, feedback, checkout and cancellation publish local incident rows; quote-only edits do not necessarily republish them. |
 | Brown-rice stockout never reaches PULSE | Actual requested unavailable products, explicit feedback and accepted substitutes are retained through checkout. Repeated logging updates one session row. |
 | Diet and budget ignored | Parsed constraints override saved defaults; exclusions persist in the session; canonical pricing and budget checks apply to generated and manually edited baskets. |
 | Checkout orders a rebuilt basket | Durable session quote and quote ID; changed baskets/prices must be reviewed again. Only exact affirmative messages can confirm. |

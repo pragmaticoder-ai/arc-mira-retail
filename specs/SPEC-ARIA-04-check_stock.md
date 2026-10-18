@@ -32,7 +32,13 @@ Read the product at the selected store. Return current stock/aisle and manager-a
 
 ## 4. Validation and limits
 
-Product/store must resolve through the local adapter. Aisle may be null when unavailable. An inactive proposed discount must not be surfaced as an approved price.
+Product and store IDs must be nonempty. NOT_FOUND means the product does not
+exist anywhere in the local catalog. If a known product has no row at the selected
+store (including an unknown store ID), return unavailable with quantity zero and
+any alternative stores. This helper does not independently validate store existence.
+Aisle is null when unavailable. discounted_price_aed may contain a proposed price
+even when discount_active is false; consumers must check the active flag before
+using it as an approved price.
 
 ## 5. Response
 

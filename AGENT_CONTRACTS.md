@@ -57,7 +57,7 @@ Response:
 | quote_id | Current quote identifier, or null |
 | reasoning | type/text operation summaries; not model-generated thoughts |
 | order | null or order_id/status/total_aed/estimated_delivery_window |
-| session_logged | Actual successful local logging status |
+| session_logged | Result of the most recent logging attempt; quote-only replies may retain the prior status |
 | demand_signals | Current product-level evidence records |
 | substitution_offers | Original product, candidate ID/name, quantity and feedback outcome |
 | mode | local_rules |
@@ -86,6 +86,10 @@ Feedback accepts the alternative for satisfied/compromise and records the origin
 need separately; rejected removes a substituted line. Natural-language feedback
 uses conservative local rules. Unknown wording is not automatically satisfaction.
 
+Incident writes occur on cart-building, feedback, checkout/retry and cancellation.
+Quote-only edits, clarification and offer-query replies do not always republish
+the incident. session_logged is not an acknowledgement of every message or quote.
+
 ### HTTP errors
 
 - 422: Pydantic request validation, including invalid UUIDs or feedback enums.
@@ -102,6 +106,9 @@ upstream failures and 503 when ARIA is unavailable or its response is malformed.
 Query: store_id (defaults to dubai_marina_01). Response: `{ "items": [...] }` with
 current local inventory rows. The storefront proxy is `GET /api/aria/inventory`.
 Approved discount flags and effective-price fields come from shared storage.
+The standalone check_stock tool may return a proposed discounted_price_aed even
+when discount_active is false. Consumers must check the flag; field presence alone
+does not authorize a discount.
 
 ### GET /health
 
@@ -121,8 +128,11 @@ functions in-process with the same storage environment.
 | GET /health | none | Service liveness and legacy mock/live mode label |
 
 Demand action values are transfer/replenish/defer; availability is re-evaluated
-server-side. Invalid, expired or conflicting decisions return 409. Discount status
-is approved/rejected. Successful identical decisions are idempotent. The PULSE
+server-side for a new decision. Invalid or expired undecided proposals and
+conflicting decisions return 409. A previously decided proposal can return its
+historical record on an identical retry. Discount status is approved/rejected;
+retries preserve the approved percentage rather than escalating its tier as the
+batch ages. Successful identical decisions are idempotent. The PULSE
 health endpoint's legacy live label does not establish working Google integration;
 `/pulse/analyze` returns 501 when USE_MOCK=false.
 

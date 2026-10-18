@@ -27,7 +27,7 @@ are not implicitly accepted over HTTP.
 
 ## 3. Processing behavior
 
-Propose discounts for stocked perishables when days-to-expiry × seeded daily sales rate is below stock. Tiers: 3 days→15%, 2→25%, 1→40%. Return expiry-batch decision status. Detection does not activate a discount; decide_discount is the manager write path.
+Propose discounts for stocked perishables when days-to-expiry × seeded daily sales rate is below stock. Tiers: 3 days→15%, 2→25%, 1→40%. Return expiry-batch decision status. For an approved batch, retain its recorded percentage and price instead of presenting a new tier as already approved. Detection does not activate a discount; decide_discount is the manager write path.
 
 ## 4. Validation and limits
 

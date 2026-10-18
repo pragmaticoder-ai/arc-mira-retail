@@ -19,8 +19,16 @@ echo "════════════════════════�
 echo "Step 1: Setting up project and enabling APIs..."
 bash "${SCRIPT_DIR}/setup_gcp_project.sh" "${PROJECT_ID}" "${REGION}"
 
-# 2. Build and Push Container Images with Cloud Build
-echo "Step 2: Building and pushing containers via Google Cloud Build..."
+# 2. Ensure Artifact Registry repository exists
+echo "Step 2: Ensuring Artifact Registry repository exists..."
+gcloud artifacts repositories create arc-docker-repo \
+    --repository-format=docker \
+    --location="${REGION}" \
+    --description="ARC Docker Repository" \
+    --project="${PROJECT_ID}" 2>/dev/null || echo "--> Repository arc-docker-repo already exists or created."
+
+# 3. Build and Push Container Images with Cloud Build
+echo "Step 3: Building and pushing containers via Google Cloud Build..."
 gcloud builds submit "${ROOT_DIR}" \
     --project="${PROJECT_ID}" \
     --config="${ROOT_DIR}/cloudbuild.yaml" \

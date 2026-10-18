@@ -95,3 +95,6 @@ For a configured deployment, `.venv/bin/python scripts/smoke_cloud.py` runs the 
 ## Specifications
 
 [ARC_SPEC.md](ARC_SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md), [AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) and the [specification index](specs/README.md) document the system. For the current hosted setup and demo receipt behavior, use [CLOUD_RUN.md](docs/CLOUD_RUN.md) and [SPEC-PULSE-08](specs/SPEC-PULSE-08-manager_decisions.md). Older local-only descriptions in other documents may predate the Google deployment.
+
+
+Demo video (3 minutes 24 seconds, AI narration): [Watch the closed-loop walkthrough](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4).

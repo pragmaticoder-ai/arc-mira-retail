@@ -4,7 +4,8 @@
 // Product card with all states from SCREENS.md / BRAND.md:
 //   default · added-by-ARIA (mira-50) · out-of-stock (danger) · discounted (amber badge)
 
-import { CATEGORY_META } from '@/lib/mockProducts'
+import Link from 'next/link'
+import { CATEGORY_META } from '@/lib/categories'
 import type { Product } from '@/lib/types'
 
 interface ProductCardProps {
@@ -29,7 +30,9 @@ export function ProductCard({ product, added, onAdd }: ProductCardProps) {
   return (
     <div className={`flex flex-col rounded-md border p-md transition-colors ${borderState}`}>
       <div className="relative mb-sm flex h-20 items-center justify-center rounded bg-mira-50 text-3xl">
-        <span aria-hidden="true">{emoji}</span>
+        <Link href={`/products/${encodeURIComponent(product.product_id)}?store_id=${encodeURIComponent(product.store_id)}`} className="flex h-full w-full items-center justify-center" aria-label={`View ${product.product_name}`}>
+          {product.image_url ? <img src={product.image_url} alt={product.product_name} loading="lazy" className="h-full w-full object-contain" /> : <span aria-hidden="true">{emoji}</span>}
+        </Link>
         {discounted && (
           <span className="badge-warning absolute right-1 top-1">
             {product.discount_pct}% off
@@ -41,9 +44,10 @@ export function ProductCard({ product, added, onAdd }: ProductCardProps) {
       </div>
 
       <h3 className="mb-0.5 line-clamp-2 text-sm font-medium text-slate-800">
-        {product.product_name}
+        <Link href={`/products/${encodeURIComponent(product.product_id)}?store_id=${encodeURIComponent(product.store_id)}`} className="hover:underline">{product.product_name}</Link>
       </h3>
-      <p className="mb-sm text-xs text-slate-400">Aisle {product.aisle_ref}</p>
+      <p className="text-xs text-slate-500">{product.brand}</p>
+      <p className="mb-sm text-xs text-slate-400">{`Aisle ${product.aisle_ref}`} {product.attributes?.pack_size ? `· ${product.attributes.pack_size}` : ''}</p>
 
       <div className="mt-auto flex items-center justify-between">
         <div className="flex items-baseline gap-1">

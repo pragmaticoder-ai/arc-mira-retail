@@ -1,19 +1,11 @@
-"""Vector search adapter (AlloyDB AI / ScaNN) — real TF-IDF cosine in mock.
-
-suggest_substitution() uses this to find semantically similar in-stock products.
-The mock computes cosine similarity over the TF-IDF product space from
-embeddings.py, so results are genuinely semantic (rice→rice/grains). Real impl
-(TODO) runs the ScaNN SQL query in ARCHITECTURE.md §6.
-
-Caller passes max_price_aed; SPEC-ARIA-05 also wants substitutes within ~20% of
-the original price, which suggest_substitution enforces via max_price_aed.
-"""
+"""PostgreSQL pgvector search; TF-IDF cosine search for explicit offline tests."""
 
 from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
 
+from tools.shared.dietary import matches_diet
 from tools.shared.embeddings import get_embeddings, product_document
 from tools.shared.settings import settings
 
@@ -76,7 +68,7 @@ class MockVectorSearch(VectorSearch):
             if p["price_aed"] < min_price_aed:
                 continue
             if dietary_preference and dietary_preference != "none":
-                if dietary_preference not in p["dietary_flags"]:
+                if not matches_diet(p, dietary_preference):
                     continue
             sim = _cosine(q, emb.embed(product_document(p)))
             candidates.append(
@@ -94,13 +86,31 @@ class MockVectorSearch(VectorSearch):
 
 
 class RealVectorSearch(VectorSearch):
-    """TODO(backend): ScaNN cosine query from ARCHITECTURE.md §6 against AlloyDB
-    (embedding <=> query_embedding), same dietary/price/stock filters."""
+    """Exact pgvector cosine search with hard stock, diet, and price filters."""
 
-    def nearest_in_stock(self, **kwargs) -> list[dict]:
-        raise NotImplementedError(
-            "RealVectorSearch not implemented. Set USE_MOCK=true or wire AlloyDB ScaNN."
-        )
+    def nearest_in_stock(self, *, query_text: str, store_id: str, dietary_preference: str,
+                         max_price_aed: float, min_price_aed: float = 0.0,
+                         exclude_product_id: str | None = None, limit: int = 1) -> list[dict]:
+        from sqlalchemy import text
+
+        from tools.shared.database import get_engine
+
+        vector = get_embeddings().embed(query_text)
+        price = "CASE WHEN discount_active THEN price_aed * (1 - COALESCE(discount_pct,0)/100) ELSE price_aed END"
+        sql = f"""SELECT product_id, product_name, category, dietary_flags, attributes, source_attributes->>'ingredients' AS ingredients, {price} AS price_aed,
+            1 - (embedding <=> CAST(:vector AS vector)) AS similarity_score
+            FROM inventory WHERE store_id=:store AND stock_quantity > 0 AND embedding IS NOT NULL
+            AND (CAST(:excluded AS TEXT) IS NULL OR product_id != :excluded)
+            AND (:diet='none' OR :diet=ANY(string_to_array(dietary_flags, ',')) OR (:diet='halal' AND category<>'halal_meat'))
+            AND {price} >= :minimum AND (CAST(:maximum AS NUMERIC)=0 OR {price} <= :maximum)
+            ORDER BY embedding <=> CAST(:vector AS vector) LIMIT :limit"""
+        with get_engine().connect() as conn:
+            rows = conn.execute(text(sql), {"vector": str(vector), "store": store_id,
+                "excluded": exclude_product_id, "diet": dietary_preference or "none",
+                "minimum": min_price_aed, "maximum": max_price_aed, "limit": max(100, limit * 10)}).mappings()
+            return [{**dict(row), "price_aed": float(row["price_aed"]),
+                     "similarity_score": float(row["similarity_score"])} for row in rows
+                    if matches_diet(dict(row), dietary_preference)][:limit]
 
 
 def get_vector_search() -> VectorSearch:

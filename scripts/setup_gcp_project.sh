@@ -6,7 +6,7 @@ set -euo pipefail
 
 PROJECT_ID="${1:-aria-mira-retail}"
 REGION="${2:-asia-southeast1}"
-BILLING_ACCOUNT_ID="${3:-016030-32803C-4259E4}"
+BILLING_ACCOUNT_ID="${3:-}"
 
 echo "════════════════════════════════════════════════════════════════════"
 echo " Setting up Google Cloud for ARC Project: ${PROJECT_ID}"
@@ -19,9 +19,9 @@ gcloud config set project "${PROJECT_ID}"
 
 # 2. Check billing status
 echo "--> Checking billing account status..."
-BILLING_ENABLED=$(gcloud billing projects describe "${PROJECT_ID}" --format="value(billingEnabled)" 2>/dev/null || echo "false")
+BILLING_ENABLED=$(gcloud billing projects describe "${PROJECT_ID}" --format="value(billingEnabled)")
 
-if [ "${BILLING_ENABLED}" != "true" ]; then
+if [[ "${BILLING_ENABLED}" != "true" && "${BILLING_ENABLED}" != "True" ]]; then
     echo "--> Billing is currently NOT enabled for ${PROJECT_ID}."
     if [ -n "${BILLING_ACCOUNT_ID}" ]; then
         echo "--> Linking project to Billing Account: ${BILLING_ACCOUNT_ID}..."

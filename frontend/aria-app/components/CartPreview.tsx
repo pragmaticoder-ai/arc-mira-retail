@@ -8,10 +8,11 @@ import { useCart } from '@/context/CartContext'
 
 interface CartPreviewProps {
   onConfirm: () => void
+  busy: boolean
   confirming: boolean
 }
 
-export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
+export function CartPreview({ onConfirm, busy, confirming }: CartPreviewProps) {
   const { items, total_aed, promotion, removeProduct, quoteId } = useCart()
   if (items.length === 0) return null
 
@@ -35,7 +36,7 @@ export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
             <span className="ml-2 tabular-nums text-slate-600">
               {(i.price_aed * i.quantity).toFixed(2)}
             </span>
-            <button disabled={confirming} onClick={() => removeProduct(i.product_id)} aria-label={`Remove ${i.product_name}`} className="ml-2 text-xs text-slate-500">Remove</button>
+            <button disabled={busy} onClick={() => removeProduct(i.product_id)} aria-label={`Remove ${i.product_name}`} className="ml-2 text-xs text-slate-500">Remove</button>
           </li>
         ))}
       </ul>
@@ -55,10 +56,10 @@ export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
       <button
         type="button"
         onClick={onConfirm}
-        disabled={confirming}
+        disabled={busy}
         className="btn-primary w-full"
       >
-        {confirming ? 'Updating…' : quoteId ? 'Confirm order' : 'Review updated basket'}
+        {confirming ? (quoteId ? 'Confirming…' : 'Reviewing…') : quoteId ? 'Confirm order' : 'Review updated basket'}
       </button>
     </div>
   )

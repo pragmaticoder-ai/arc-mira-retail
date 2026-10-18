@@ -15,12 +15,30 @@ echo " Deploying ARC to Google Cloud"
 echo " Project: ${PROJECT_ID} | Region: ${REGION}"
 echo "════════════════════════════════════════════════════════════════════"
 
+# Local execution needs cloud dependencies, not published app containers.
+if [[ "${3:-}" == "--local-only" ]]; then
+    exec "${ROOT_DIR}/.venv/bin/python" "${SCRIPT_DIR}/provision_local_gcp.py" --project "${PROJECT_ID}" --region "${REGION}"
+fi
+
+if ! command -v terraform &> /dev/null; then
+    echo "Terraform is required for Cloud Run deployment; use --local-only for local apps." >&2
+    exit 1
+fi
+
 # 1. Project Setup & API Enablement
 echo "Step 1: Setting up project and enabling APIs..."
 bash "${SCRIPT_DIR}/setup_gcp_project.sh" "${PROJECT_ID}" "${REGION}"
 
-# 2. Build and Push Container Images with Cloud Build
-echo "Step 2: Building and pushing containers via Google Cloud Build..."
+# 2. Ensure Artifact Registry repository exists
+echo "Step 2: Ensuring Artifact Registry repository exists..."
+gcloud artifacts repositories create arc-docker-repo \
+    --repository-format=docker \
+    --location="${REGION}" \
+    --description="ARC Docker Repository" \
+    --project="${PROJECT_ID}" 2>/dev/null || echo "--> Repository arc-docker-repo already exists or created."
+
+# 3. Build and Push Container Images with Cloud Build
+echo "Step 3: Building and pushing containers via Google Cloud Build..."
 gcloud builds submit "${ROOT_DIR}" \
     --project="${PROJECT_ID}" \
     --config="${ROOT_DIR}/cloudbuild.yaml" \
@@ -41,53 +59,8 @@ if command -v terraform &> /dev/null; then
         -var="project_id=${PROJECT_ID}" \
         -var="region=${REGION}"
 else
-    echo "Notice: terraform CLI is not installed locally."
-    echo "You can install terraform via 'brew install terraform' or deploy Cloud Run services directly using gcloud."
-    echo "Deploying Cloud Run services with gcloud..."
-
-    IMAGE_PREFIX="${REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo"
-
-    # Deploy ARIA Agent
-    gcloud run deploy arc-aria-agent \
-        --project="${PROJECT_ID}" \
-        --region="${REGION}" \
-        --image="${IMAGE_PREFIX}/aria-agent:latest" \
-        --allow-unauthenticated \
-        --min-instances=0 \
-        --max-instances=3 \
-        --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_REGION=${REGION},USE_MOCK=true,ENVIRONMENT=production"
-
-    ARIA_URL=$(gcloud run services describe arc-aria-agent --project="${PROJECT_ID}" --region="${REGION}" --format="value(status.url)")
-
-    # Deploy PULSE Agent
-    gcloud run deploy arc-pulse-agent \
-        --project="${PROJECT_ID}" \
-        --region="${REGION}" \
-        --image="${IMAGE_PREFIX}/pulse-agent:latest" \
-        --allow-unauthenticated \
-        --min-instances=0 \
-        --max-instances=3 \
-        --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_REGION=${REGION},USE_MOCK=true,ENVIRONMENT=production"
-
-    # Deploy Storefront
-    gcloud run deploy arc-storefront \
-        --project="${PROJECT_ID}" \
-        --region="${REGION}" \
-        --image="${IMAGE_PREFIX}/storefront:latest" \
-        --allow-unauthenticated \
-        --min-instances=0 \
-        --max-instances=3 \
-        --set-env-vars="ARIA_AGENT_URL=${ARIA_URL},NODE_ENV=production"
-
-    # Deploy PULSE Dashboard
-    gcloud run deploy arc-pulse-dashboard \
-        --project="${PROJECT_ID}" \
-        --region="${REGION}" \
-        --image="${IMAGE_PREFIX}/pulse-dashboard:latest" \
-        --allow-unauthenticated \
-        --min-instances=0 \
-        --max-instances=3 \
-        --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},USE_MOCK=true"
+    echo "Terraform is required for Cloud Run deployment. Use --local-only to provision dependencies for local apps." >&2
+    exit 1
 fi
 
 echo "════════════════════════════════════════════════════════════════════"

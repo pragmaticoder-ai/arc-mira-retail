@@ -1,3 +1,9 @@
+> Google runtime: see [LOCAL_GOOGLE.md](docs/LOCAL_GOOGLE.md). ARIA now adds
+> `GET /aria/bootstrap` for the configured shopper profile and active stores.
+> Chat responses include `cart_changed=false` for questions and clarification;
+> clients must preserve their current cart and quote for these turns.
+> Existing mutation tools retain their validation contracts.
+
 # ARC API and tool contracts
 
 Updated October 18, 2026 · Specification 1.1

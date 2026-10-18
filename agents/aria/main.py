@@ -1,15 +1,12 @@
-"""Stateful local ARIA orchestration. Google ADK execution remains a separate integration.
-
-Sessions, quotes, orders and demand evidence use the shared storage adapter.
-The deterministic language parser is explicitly labeled in every response.
-"""
+"""ARIA: Gemini shopping proposals with server-controlled quotes and checkout."""
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from tools.aria_tools.build_cart import build_cart
@@ -20,6 +17,7 @@ from tools.aria_tools.place_order import place_order
 from tools.aria_tools.suggest_substitution import suggest_substitution
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.demand import classify_feedback, signal
+from tools.shared.dietary import dietary_message, matches_diet
 from tools.shared.errors import is_error
 from tools.shared.pricing import canonical_items, quote_cart
 from tools.shared.settings import settings
@@ -48,7 +46,7 @@ class ChatRequest(BaseModel):
 
 def _unwrap(result: dict) -> dict:
     if is_error(result):
-        raise HTTPException(400, detail=result["error_message"])
+        raise HTTPException(502 if result.get("error_code") == "UPSTREAM_ERROR" else 400, detail=result["error_message"])
     return result
 
 
@@ -81,11 +79,11 @@ def _log(state: dict, order_placed: bool, reason: str | None = None) -> bool:
     return not is_error(logged) and logged.get("logged") is True
 
 
-def _response(state: dict, reply: str, steps: list[dict] | None = None) -> dict:
-    return {"session_id": state["session_id"], "reply": reply, "cart": state["cart"],
+def _response(state: dict, reply: str, steps: list[dict] | None = None, *, cart_changed: bool = True) -> dict:
+    return {"session_id": state["session_id"], "reply": reply, "cart": state["cart"], "cart_changed": cart_changed,
             "quote_id": state.get("quote_id"), "reasoning": steps or [], "order": state.get("order"),
             "session_logged": state.get("session_logged", False), "demand_signals": state["demand_signals"],
-            "substitution_offers": state.get("offers", []), "mode": "local_rules"}
+            "substitution_offers": state.get("offers", []), "mode": "local_rules" if settings.use_mock else "google"}
 
 
 def _feedback(state: dict, req: ChatRequest, outcome: str) -> str:
@@ -118,6 +116,59 @@ def _feedback(state: dict, req: ChatRequest, outcome: str) -> str:
     return {"compromise": "I recorded this as a temporary compromise. Your original preference stays visible to the store team.",
             "satisfied": "I recorded that the alternative meets your needs.",
             "rejected": "I removed that substitute and recorded that your original need remains unresolved."}[outcome] + " Review the basket before confirming."
+
+
+def _live_shopping(state: dict, req: ChatRequest) -> dict:
+    from agents.google_runtime import plan_shopping
+
+    db = get_alloydb()
+    from tools.catalog.service import planner_candidates
+
+    retained = {i["product_id"] for i in state.get("cart", {}).get("items", [])} | set(state.get("requested_items", []))
+    catalog = planner_candidates(req.store_id, req.message, retained)
+    try:
+        plan = plan_shopping(req.message, state, catalog)
+    except Exception as exc:
+        raise HTTPException(502, "Google shopping planner failed; check model access and server logs") from exc
+    state["conversation"] = (state.get("conversation", []) + [
+        {"role": "user", "text": req.message}, {"role": "assistant", "text": plan.reply}])[-12:]
+    if plan.action != "update_cart":
+        db.save_session(state["session_id"], state)
+        return _response(state, plan.reply, cart_changed=False)
+    state.update(dietary=plan.dietary, budget=plan.budget, household=plan.household,
+                 excluded_ids=plan.excluded_ids, excluded_categories=plan.excluded_categories)
+    products = {p["product_id"]: p for p in catalog}
+    if any(i.product_id not in products for i in plan.items) or any(pid not in products for pid in plan.requested_ids):
+        raise HTTPException(502, "Planner returned a product outside this store catalog")
+    notes = []
+    for pid in plan.requested_ids:
+        product = products[pid]
+        if pid in state["excluded_ids"] or product["category"] in state["excluded_categories"]:
+            continue
+        if not matches_diet(product, state["dietary"]):
+            continue
+        state["requested_items"] = list({*state["requested_items"], pid})
+        if product["stock_quantity"] <= 0:
+            if not any(p["product_id"] == pid for p in state["unavailable"]):
+                state["unavailable"].append({"product_id": pid, "product_name": product["product_name"]})
+            if not any(p["product_id"] == pid for p in state["demand_signals"]):
+                state["demand_signals"].append(signal(product, "unknown", req.message))
+            if re.search(r"\b(no substitutes?|no alternatives|whole ?grain only)\b", req.message, re.I):
+                sub = {}
+            else:
+                sub = _unwrap(suggest_substitution(pid, req.store_id, state["dietary"], state["budget"], req.customer_id))
+            offer = {"product_id": pid, "product_name": product["product_name"], "quantity": 1,
+                     "substitute_product_id": sub.get("substitute_product_id"),
+                     "substitute_name": sub.get("name"), "outcome": "unknown"}
+            state["offers"] = [o for o in state["offers"] if o["product_id"] != pid] + [offer]
+            notes.append(f"{product['product_name']} is unavailable. " +
+                (f"Alternative: {sub['name']}. Please rate whether it meets your needs." if sub.get("substitute_product_id") else "No suitable alternative was found."))
+    _quote(state, [i.model_dump() for i in plan.items])
+    state["session_logged"] = _log(state, False)
+    db.save_session(state["session_id"], state)
+    return _response(state, plan.reply + " " + " ".join(notes) +
+        f" Basket total: AED {state['cart']['total_aed']:.2f}. Review before confirming.",
+        [{"type": "ACTION", "text": "Gemini planned against the PostgreSQL catalog; the server validated stock, diet, exclusions, budget and current prices."}])
 
 
 def _orchestrate(req: ChatRequest) -> dict:
@@ -197,10 +248,12 @@ def _orchestrate(req: ChatRequest) -> dict:
         elif msg in {"sync cart", "review cart"} and req.cart is not None:
             _quote(state, req.cart)
             reply = "Here is your updated basket with current store prices. Review it before confirming."
-        elif any(w in msg for w in ("discount", "offer")) and "groceries" not in msg and "laban" not in msg:
+        elif settings.use_mock and any(w in msg for w in ("discount", "offer")) and "groceries" not in msg and "laban" not in msg:
             products = [p for p in db.list_inventory(req.store_id) if p.get("discount_active") and p["stock_quantity"] > 0]
             reply = "Approved offers: " + "; ".join(f"{p['product_name']}: AED {p['discounted_price_aed']:.2f}" for p in products) if products else "There are no manager-approved discounts at this store yet."
         else:
+            if not settings.use_mock:
+                return _live_shopping(state, req)
             intent = _unwrap(parse_intent(req.message))
             state["dietary"] = intent["dietary_preference"] if intent["dietary_preference"] != "none" else state["dietary"]
             state["budget"] = intent["budget_aed"] if intent["budget_aed"] is not None else state["budget"]
@@ -228,8 +281,8 @@ def _orchestrate(req: ChatRequest) -> dict:
                 if not product:
                     notes.append(f"{pid} is not stocked at this store.")
                     continue
-                if state["dietary"] != "none" and state["dietary"] not in product["dietary_flags"].split(","):
-                    notes.append(f"I excluded {product['product_name']} because it does not match {state['dietary']}.")
+                if not matches_diet(product, state["dietary"]):
+                    notes.append(dietary_message(product, state["dietary"]))
                     continue
                 state["requested_items"] = list({*state["requested_items"], pid})
                 if product["stock_quantity"] > 0:
@@ -263,7 +316,7 @@ def _orchestrate(req: ChatRequest) -> dict:
             reply = f"Your {state['dietary']} basket totals AED {state['cart']['total_aed']:.2f} within AED {state['budget']:.2f}. " + " ".join(notes) + " Review the basket before confirming."
         db.save_session(sid, state)
         return _response(state, reply, [{"type": "ACTION", "text": "Validate constraints, reprice the basket and preserve customer evidence."},
-                                        {"type": "OBSERVATION", "text": "Local deterministic orchestration; no model-generated reasoning."}])
+                                        {"type": "OBSERVATION", "text": "Local deterministic orchestration; no model-generated reasoning." if settings.use_mock else "Server-validated quote, checkout or explicit customer feedback; no model-generated internal reasoning."}])
 
 
 @app.post("/aria/chat")
@@ -274,6 +327,48 @@ def aria_chat(req: ChatRequest) -> dict:
 @app.get("/aria/inventory")
 def inventory(store_id: str = "dubai_marina_01") -> dict:
     return {"items": get_alloydb().list_inventory(store_id)}
+
+
+@app.get("/aria/catalog")
+def catalog(store_id: str = "dubai_marina_01", category: str = "all", q: str = Query(default="", max_length=200),
+            page: int = Query(default=1, ge=1), page_size: int = Query(default=24, ge=1, le=96),
+            sort: str = "name", min_price: float | None = Query(default=None, ge=0),
+            max_price: float | None = Query(default=None, ge=0), in_stock: bool = False,
+            attributes: str = Query(default="{}", max_length=8000)) -> dict:
+    from tools.catalog.service import list_products
+
+    try:
+        selected = json.loads(attributes)
+        if not isinstance(selected, dict) or len(selected) > 12:
+            raise ValueError("Invalid facets")
+        if min_price is not None and max_price is not None and min_price > max_price:
+            raise ValueError("Minimum price exceeds maximum price")
+        return list_products(store_id=store_id, category=category, q=q, page=page, page_size=page_size,
+            sort=sort, min_price=min_price, max_price=max_price, in_stock=in_stock, attributes=selected)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/aria/products/{product_id}")
+def product(product_id: str, store_id: str = "dubai_marina_01") -> dict:
+    from tools.catalog.service import product_detail
+
+    item = product_detail(product_id, store_id)
+    if item is None:
+        raise HTTPException(404, "Product not found at this store")
+    return item
+
+
+@app.get("/aria/bootstrap")
+def bootstrap(customer_id: str = "sarah_123") -> dict:
+    db = get_alloydb()
+    with db.transaction():
+        customer = _unwrap(get_customer_context(customer_id))
+        stores = db.list_stores()
+        selected = settings.default_store_id or customer["preferred_store"]
+        if selected not in {row["store_id"] for row in stores}:
+            selected = customer["preferred_store"]
+        return {"customer": customer, "stores": stores, "default_store_id": selected}
 
 
 @app.get("/health")

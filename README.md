@@ -1,3 +1,7 @@
+> **Google infrastructure local run:** follow [LOCAL_GOOGLE.md](docs/LOCAL_GOOGLE.md).
+> `scripts/run_local.py` now defaults to Google services. Use `--offline` explicitly
+> for the older SQLite/rules demo described below.
+
 # ARC — Agentic Retail Command
 
 ARC preserves the demand a completed sale can hide. A shopper accepts an
@@ -47,7 +51,7 @@ The launcher uses `data/local/incidents.sqlite` and
 existing data:
 
 ```bash
-.venv/bin/python scripts/run_local.py --data-dir /tmp/arc-fresh-demo
+.venv/bin/python scripts/run_local.py --offline --data-dir /tmp/arc-fresh-demo
 ```
 
 If the usual ports are occupied, pass `--web-port 3100 --aria-port 8002

@@ -1,9 +1,7 @@
-"""AlloyDB (PostgreSQL) adapter — placeholder with in-memory mock.
+"""Retail persistence interface and explicit offline test adapters.
 
-Local operational data: inventory, orders, quotes, customer sessions and manager
-approval records. SQLite persists across processes when ARC_STATE_DB is set;
-otherwise a transactional in-memory store supports isolated tests. The real
-Google AlloyDB adapter remains a deferred integration.
+Google mode uses PostgresClient. In-memory and SQLite adapters are available
+only when offline mode is explicitly selected.
 """
 
 from __future__ import annotations
@@ -25,6 +23,9 @@ from tools.shared.settings import settings
 
 
 class AlloyDBClient(ABC):
+    def list_stores(self) -> list[dict]:
+        raise NotImplementedError
+
     @abstractmethod
     def get_customer(self, customer_id: str) -> dict | None: ...
 
@@ -103,35 +104,25 @@ def state_operation(fn):
     return wrapped
 
 
-class MockAlloyDBClient(AlloyDBClient):
-    def __init__(self) -> None:
-        from tools.shared import mock_inventory
+class RetailStateClient(AlloyDBClient):
+    """Shared business operations over a transaction-scoped retail state."""
 
-        # Copy so in-session writes don't mutate the module constants.
+    def __init__(self) -> None:
         self._lock = threading.RLock()
         self._depth = 0
         self._sessions: dict[str, dict] = {}
         self._decisions: dict[str, dict] = {}
-        self._customers: dict[str, dict] = {c["customer_id"]: dict(c) for c in mock_inventory.MOCK_CUSTOMERS}
-        # Inventory is store-aware: keyed by (product_id, store_id).
-        self._inventory: dict[tuple[str, str], dict] = {
-            (p["product_id"], p["store_id"]): dict(p) for p in mock_inventory.MOCK_INVENTORY
-        }
-        # Keep perishable seed ages stable while business time moves forward.
-        for row in self._inventory.values():
-            if row.get("expiry_date"):
-                from datetime import date
-                offset = date.fromisoformat(row["expiry_date"]) - date(2026, 10, 17)
-                row["expiry_date"] = (today() + offset).isoformat()
-            row.setdefault("supplier_id", "demo_supplier")
-        self._primary_store = mock_inventory.STORE_ID
-        self._promotions: list[dict] = [dict(p) for p in mock_inventory.MOCK_PROMOTIONS]
-        self._replenishment: dict[tuple[str, str], dict] = {
-            (r["store_id"], r["product_id"]): dict(r)
-            for r in getattr(mock_inventory, "MOCK_REPLENISHMENT", [])
-        }
+        self._customers: dict[str, dict] = {}
+        self._inventory: dict[tuple[str, str], dict] = {}
+        self._promotions: list[dict] = []
+        self._replenishment: dict[tuple[str, str], dict] = {}
         self._orders: dict[str, dict] = {}
         self._purchase_orders: dict[str, dict] = {}
+        self._stores: list[dict] = []
+        self._primary_store = "dubai_marina_01"
+
+    def list_stores(self) -> list[dict]:
+        return self._stores
 
     def get_customer(self, customer_id: str) -> dict | None:
         return self._customers.get(customer_id)
@@ -312,9 +303,42 @@ class MockAlloyDBClient(AlloyDBClient):
 
 # Every public operation participates in the same transaction. Deep copies
 # prevent callers from mutating persisted state outside that transaction.
-for _name, _method in list(vars(MockAlloyDBClient).items()):
+for _name, _method in list(vars(RetailStateClient).items()):
     if callable(_method) and not _name.startswith("_") and _name != "transaction":
-        setattr(MockAlloyDBClient, _name, state_operation(_method))
+        setattr(RetailStateClient, _name, state_operation(_method))
+
+
+class MockAlloyDBClient(RetailStateClient):
+    def __init__(self) -> None:
+        from tools.shared import mock_inventory
+
+        # Copy so in-session writes don't mutate the module constants.
+        self._lock = threading.RLock()
+        self._depth = 0
+        self._sessions: dict[str, dict] = {}
+        self._decisions: dict[str, dict] = {}
+        self._customers: dict[str, dict] = {c["customer_id"]: dict(c) for c in mock_inventory.MOCK_CUSTOMERS}
+        # Inventory is store-aware: keyed by (product_id, store_id).
+        self._inventory: dict[tuple[str, str], dict] = {
+            (p["product_id"], p["store_id"]): dict(p) for p in mock_inventory.MOCK_INVENTORY
+        }
+        # Keep perishable seed ages stable while business time moves forward.
+        for row in self._inventory.values():
+            if row.get("expiry_date"):
+                from datetime import date
+                offset = date.fromisoformat(row["expiry_date"]) - date(2026, 10, 17)
+                row["expiry_date"] = (today() + offset).isoformat()
+            row.setdefault("supplier_id", "demo_supplier")
+        self._stores = copy.deepcopy(mock_inventory.MOCK_STORES)
+        self._primary_store = mock_inventory.STORE_ID
+        self._promotions: list[dict] = [dict(p) for p in mock_inventory.MOCK_PROMOTIONS]
+        self._replenishment: dict[tuple[str, str], dict] = {
+            (r["store_id"], r["product_id"]): dict(r)
+            for r in getattr(mock_inventory, "MOCK_REPLENISHMENT", [])
+        }
+        self._orders: dict[str, dict] = {}
+        self._purchase_orders: dict[str, dict] = {}
+
 
 
 class SqliteAlloyDBClient(MockAlloyDBClient):
@@ -351,75 +375,6 @@ class SqliteAlloyDBClient(MockAlloyDBClient):
                 self._depth -= 1
 
 
-class RealAlloyDBClient(MockAlloyDBClient):
-    """Production AlloyDB / Cloud SQL PostgreSQL adapter.
-    Uses SQLAlchemy + pg8000 and PostgreSQL row-level locks (FOR UPDATE)
-    to serialize operations and persist state atomically across Cloud Run instances.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        import os
-
-        import sqlalchemy
-
-        user = settings.alloydb_user
-        password = settings.alloydb_password or os.getenv("ALLOYDB_PASSWORD", "")
-        host = settings.alloydb_host
-        port = settings.alloydb_port
-        database = settings.alloydb_database
-
-        url = f"postgresql+pg8000://{user}:{password}@{host}:{port}/{database}"
-        self._engine = sqlalchemy.create_engine(url, pool_pre_ping=True)
-        self._init_db()
-
-    def _init_db(self) -> None:
-        import sqlalchemy
-
-        with self._engine.begin() as conn:
-            conn.execute(sqlalchemy.text(
-                "CREATE TABLE IF NOT EXISTS arc_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)"
-            ))
-            res = conn.execute(sqlalchemy.text("SELECT COUNT(*) FROM arc_state WHERE id=1")).scalar()
-            if res == 0:
-                conn.execute(
-                    sqlalchemy.text("INSERT INTO arc_state (id, payload) VALUES (1, :payload)"),
-                    {"payload": json.dumps(self._dump())}
-                )
-
-    @contextmanager
-    def transaction(self):
-        import sqlalchemy
-
-        with self._lock:
-            outer = self._depth == 0
-            conn = None
-            tx = None
-            if outer:
-                conn = self._engine.connect()
-                tx = conn.begin()
-                row = conn.execute(sqlalchemy.text("SELECT payload FROM arc_state WHERE id=1 FOR UPDATE")).fetchone()
-                if row and row[0]:
-                    self._load(json.loads(row[0]))
-            self._depth += 1
-            try:
-                yield self
-                if outer and conn and tx:
-                    conn.execute(
-                        sqlalchemy.text("UPDATE arc_state SET payload=:payload WHERE id=1"),
-                        {"payload": json.dumps(self._dump())}
-                    )
-                    tx.commit()
-            except Exception:
-                if outer and tx:
-                    tx.rollback()
-                raise
-            finally:
-                self._depth -= 1
-                if outer and conn:
-                    conn.close()
-
-
 # Single shared instance so in-session mock writes persist across tool calls.
 _client: AlloyDBClient | None = None
 
@@ -428,7 +383,9 @@ def get_alloydb() -> AlloyDBClient:
     global _client
     if _client is None:
         if not settings.use_mock:
-            _client = RealAlloyDBClient()
+            from tools.shared.postgres_client import PostgresClient
+
+            _client = PostgresClient()
         elif settings.arc_state_db:
             _client = SqliteAlloyDBClient(settings.arc_state_db)
         else:

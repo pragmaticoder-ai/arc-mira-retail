@@ -4,7 +4,7 @@
 -- Demo scenarios:
 --   rice_brown_500g  : stock_quantity=0  (stockout → substitution + PULSE pattern)
 --   strawberry_250g  : stock_quantity=0  (second OOS item)
---   laban_almarai_1l : discount_active=true, 25% (perishable discount surfacing)
+--   laban_almarai_1l : discount_active=false; manager approval required (perishable discount surfacing)
 -- Embeddings generated post-load (DEPLOYMENT.md §4); omitted here.
 -- ════════════════════════════════════════════════════════════════════
 
@@ -14,7 +14,7 @@ INSERT INTO inventory
    is_perishable, expiry_date, discount_active, discount_pct) VALUES
 -- ── Dairy ──
 ('milk_almarai_2l','Almarai Full Fat Milk 2L','dairy','Almarai',12.0,'halal,vegetarian','dubai_marina_01','A2',40,10,'sup_001',true,'2026-10-24',false,NULL),
-('laban_almarai_1l','Almarai Laban 1L','dairy','Almarai',8.0,'halal,vegetarian','dubai_marina_01','A2',48,12,'sup_001',true,'2026-10-19',true,25.0),
+('laban_almarai_1l','Almarai Laban 1L','dairy','Almarai',8.0,'halal,vegetarian','dubai_marina_01','A2',48,12,'sup_001',true,'2026-10-19',false,NULL),
 ('cheese_kraft_200g','Kraft Cheddar Slices 200g','dairy','Kraft',14.5,'halal,vegetarian','dubai_marina_01','A3',25,8,'sup_002',true,'2026-11-10',false,NULL),
 ('yogurt_activia_6pk','Activia Yogurt 6-pack','dairy','Activia',11.0,'halal,vegetarian','dubai_marina_01','A2',30,10,'sup_001',true,'2026-10-28',false,NULL),
 ('butter_lurpak_200g','Lurpak Butter 200g','dairy','Lurpak',16.0,'halal,vegetarian','dubai_marina_01','A3',18,6,'sup_002',true,'2026-12-01',false,NULL),

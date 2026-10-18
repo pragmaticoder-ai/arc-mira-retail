@@ -1,3 +1,7 @@
+> Runtime update: [Google-backed local execution](docs/LOCAL_GOOGLE.md) describes
+> the implemented Google path and its current boundaries. Older offline sections
+> below require explicit `USE_MOCK=true` / `--offline`.
+
 # ARC local operation and cloud integration plan
 
 Updated October 18, 2026 · Specification 1.1

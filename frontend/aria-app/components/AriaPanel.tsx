@@ -34,6 +34,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
   ])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const sessionId = useRef<string>(crypto.randomUUID())
 
   const send = useCallback(
@@ -41,6 +42,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
       const trimmed = text.trim()
       if (!trimmed || busy) return
       setBusy(true)
+      setConfirming(['confirm', 'confirm order', 'review cart', 'yes', 'place order', 'go ahead', 'proceed'].includes(trimmed.toLowerCase()) && !feedback)
       setInput('')
 
       const userMsg: ChatMessage = {
@@ -77,7 +79,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
         setSignals(data.demand_signals || [])
         setOffers(data.substitution_offers || [])
 
-        setCart({ ...data.cart, quote_id: data.quote_id })
+        if (data.cart_changed !== false) setCart({ ...data.cart, quote_id: data.quote_id })
         if (data.order) {
           setOrder(data.order)
           setTimeout(() => router.push('/order/confirmed'), 900)
@@ -105,6 +107,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
         )
       } finally {
         setBusy(false)
+        setConfirming(false)
       }
     },
     [busy, customerId, storeId, setCart, setOrder, router, items, quoteId],
@@ -115,7 +118,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
       {/* Header */}
       <div className="bg-mira-600 px-md py-3 text-white">
         <p className="text-sm font-medium">ARIA — grocery assistant</p>
-        <p className="text-xs text-mira-100">Local rules · shared store inventory</p>
+        <p className="text-xs text-mira-100">Shopping advice · shared store inventory</p>
       </div>
 
       {/* Chat thread */}
@@ -170,7 +173,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
         </div>)}
         {signals.filter((s) => s.outcome !== 'fulfilled').map((s) => <p key={s.product_id} className="mt-1 text-xs text-mira-700">Recorded: {s.outcome === 'unknown' ? 'awaiting your feedback' : s.outcome} · {s.product_name}</p>)}
       </div>}
-      <CartPreview onConfirm={() => send('confirm')} confirming={busy} />
+      <CartPreview onConfirm={() => send('confirm')} busy={busy} confirming={confirming} />
 
       {/* Input row */}
       <form

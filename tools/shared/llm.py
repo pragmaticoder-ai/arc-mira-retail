@@ -1,14 +1,4 @@
-"""LLM adapter (Gemini via Vertex AI) — placeholder with mock implementation.
-
-The agent reasons through tool docstrings; a few tools also need direct LLM
-calls (build_cart goal->categories mapping, optimize_budget reasoning). Those
-tools depend on this interface, never on the Vertex AI SDK directly, so the
-mock swaps to real with one env flag.
-
-Real implementation (TODO for backend engineer): wire vertexai.generative_models
-GenerativeModel in RealLLM.generate(). Mock returns deterministic canned output
-so flows are demo-stable and offline.
-"""
+"""Gemini via Google Gen AI on Vertex AI; explicit offline test implementation."""
 
 from __future__ import annotations
 
@@ -86,23 +76,27 @@ class RealLLM(LLM):
     """Production Vertex AI Gemini adapter."""
 
     def __init__(self) -> None:
-        import vertexai
-        from vertexai.generative_models import GenerativeModel
+        from tools.shared.google_client import get_google_client
 
-        vertexai.init(project=settings.google_cloud_project, location=settings.vertex_ai_location)
-        self._flash_model = GenerativeModel(settings.gemini_flash_model)
-        self._pro_model = GenerativeModel(settings.gemini_pro_model)
+        self.client = get_google_client()
 
     def generate(self, prompt: str, *, model: str | None = None, **kwargs: Any) -> str:
-        selected_model = self._pro_model if model and "pro" in model else self._flash_model
-        response = selected_model.generate_content(prompt, **kwargs)
+        from google.genai import types
+
+        response = self.client.models.generate_content(
+            model=model or settings.gemini_flash_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(**kwargs),
+        )
+        if not response.text:
+            raise RuntimeError("Gemini returned no text")
         return response.text
 
     def classify_goal_to_categories(self, goal: str) -> list[str]:
         prompt = (
             f"You are a retail grocery categorizer. Given the customer shopping goal: '{goal}', "
             f"select only the relevant categories from this allowed list: {ALLOWED_CATEGORIES}. "
-            "Return a valid JSON array of category strings, e.g. [\"dairy\", \"grains\"]. Do not include markdown or explanations."
+            'Return a valid JSON array of category strings, e.g. ["dairy", "grains"]. Do not include markdown or explanations.'
         )
         try:
             raw = self.generate(prompt)
@@ -116,18 +110,9 @@ class RealLLM(LLM):
                 valid = [c for c in parsed if c in ALLOWED_CATEGORIES]
                 if valid:
                     return valid
-        except Exception:
-            pass
-
-        # Fallback to rule matching if offline or parsing error
-        g = goal.lower()
-        if "biryani" in g:
-            return ["grains", "halal_meat", "condiments", "vegetables"]
-        if "breakfast" in g:
-            return ["dairy", "grains", "fruits", "beverages"]
-        if "snack" in g or "party" in g:
-            return ["snacks", "beverages", "fruits"]
-        return ["dairy", "grains", "halal_meat", "vegetables", "fruits", "beverages"]
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Gemini returned invalid grocery categories") from exc
+        raise ValueError("Gemini returned no valid grocery categories")
 
 
 def get_llm() -> LLM:

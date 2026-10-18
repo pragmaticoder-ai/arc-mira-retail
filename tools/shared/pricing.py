@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from tools.shared.alloydb_client import get_alloydb
+from tools.shared.dietary import dietary_message, matches_diet
 from tools.shared.errors import error, is_error
 
 
@@ -31,8 +32,8 @@ def canonical_items(cart: list[dict], store_id: str, dietary: str = "none", *, c
         p = db.get_product_at_store(pid, store_id)
         if not p:
             return error("NOT_FOUND", f"Product {pid} not found at this store")
-        if dietary != "none" and dietary not in p["dietary_flags"].split(","):
-            return error("VALIDATION_ERROR", f"{p['product_name']} does not match {dietary}")
+        if not matches_diet(p, dietary):
+            return error("VALIDATION_ERROR", dietary_message(p, dietary))
         if check_stock and qty > p["stock_quantity"]:
             return error("VALIDATION_ERROR", f"Insufficient stock for {p['product_name']}")
         items.append({"product_id": pid, "product_name": p["product_name"], "quantity": qty,

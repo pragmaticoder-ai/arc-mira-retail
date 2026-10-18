@@ -25,6 +25,7 @@ interface CartContextValue {
   items: CartItem[]
   catalog: Product[]
   setCatalog: (products: Product[]) => void
+  registerProducts: (products: Product[]) => void
   quoteId: string | null
   total_aed: number
   promotion: AppliedPromotion | null
@@ -63,6 +64,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated) sessionStorage.setItem('arc-checkout', JSON.stringify({ items, promotion, order }))
   }, [hydrated, items, promotion, order])
+
+  const registerProducts = useCallback((products: Product[]) => {
+    setCatalog(previous => {
+      const merged = new Map(previous.map(p => [p.product_id, p]))
+      products.forEach(p => merged.set(p.product_id, p))
+      return Array.from(merged.values()).slice(-2000)
+    })
+  }, [])
 
   const recompute = useCallback(
     (next: CartItem[], promo: AppliedPromotion | null) => {
@@ -144,7 +153,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const value: CartContextValue = {
     items,
-    catalog, setCatalog, quoteId,
+    catalog, setCatalog, registerProducts, quoteId,
     total_aed,
     promotion,
     order,

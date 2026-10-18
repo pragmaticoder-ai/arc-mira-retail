@@ -1,13 +1,4 @@
-"""Embeddings adapter — real TF-IDF semantic vectors (pure Python, no deps).
-
-In production this is replaced by Vertex AI textembedding-gecko (RealEmbeddings,
-TODO). The mock computes a genuine TF-IDF vector over a fixed product-text
-vocabulary so cosine similarity is semantically meaningful: "brown rice" lands
-near other rice/grain products, not unrelated items. Deterministic and offline.
-
-The vocabulary + IDF are derived from the shared product corpus once, so every
-embed() call projects into the same space (required for meaningful cosine).
-"""
+"""Google text embeddings, with TF-IDF available only for offline tests."""
 
 from __future__ import annotations
 
@@ -17,6 +8,7 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from tools.shared.google_client import get_google_client
 from tools.shared.retry import with_retry
 from tools.shared.settings import settings
 
@@ -115,13 +107,24 @@ class MockEmbeddings(Embeddings):
 
 
 class RealEmbeddings(Embeddings):
-    """TODO(backend): vertexai.language_models.TextEmbeddingModel
-    .from_pretrained(settings.embedding_model).get_embeddings([text])."""
+    """Google Gen AI embeddings with explicit dimensions matching pgvector."""
 
     def embed(self, text: str) -> list[float]:
-        raise NotImplementedError(
-            "RealEmbeddings.embed not implemented. Set USE_MOCK=true or wire Vertex AI."
+        from google.genai import types
+
+        response = get_google_client().models.embed_content(
+            model=settings.embedding_model,
+            contents=text,
+            config=types.EmbedContentConfig(
+                output_dimensionality=settings.embedding_dim
+            ),
         )
+        if not response.embeddings or not response.embeddings[0].values:
+            raise RuntimeError("Google returned no embedding")
+        values = response.embeddings[0].values
+        if len(values) != settings.embedding_dim:
+            raise ValueError("Embedding dimensions differ from EMBEDDING_DIM")
+        return values
 
 
 def get_embeddings() -> Embeddings:

@@ -8,12 +8,11 @@ as the tools are implemented (SPEC-ARIA-01..09).
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from tools.shared.auth import verify_iam_token
 from tools.shared.logger import get_logger
-from tools.shared.rate_limit import limiter
+from tools.shared.rate_limit import handle_rate_limit, limiter
 
 logger = get_logger("aria_tools")
 
@@ -23,7 +22,7 @@ app = FastAPI(
     description="ARIA agent tool functions for MIRA Retail",
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, handle_rate_limit)
 
 # ── Tool routers (each guarded by IAM auth) ──────────────────────────
 from tools.aria_tools import (  # noqa: E402

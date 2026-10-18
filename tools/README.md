@@ -1,65 +1,24 @@
-# ARC backend tools — adapter placeholders (mock-first)
+# ARC tools and local adapters
 
-This directory is seeded by the frontend engineer as a **clean starting point**
-for the backend engineer. It contains the shared adapter layer only — the 9
-ARIA + 6 PULSE tool functions are yours to build on top of it (see
-`AGENT_CONTRACTS.md` and `specs/SPEC-ARIA-*.md` / `specs/SPEC-PULSE-*.md`).
+The nine ARIA and six original PULSE tool functions are implemented. Demand
+intelligence adds evidence aggregation, action comparison, manager decisions and
+outcome monitoring. Tool functions return plain dictionaries.
 
-## The idea: every Google dependency sits behind an interface
+`USE_MOCK=true` selects deterministic local implementations. Configure separate
+`ARC_STATE_DB` and `ARC_BRIDGE_DB` files for cross-process operation; without
+paths the adapters use isolated process memory for tests. `scripts/run_local.py`
+sets the paths for all apps. Operational writes use SQLite transactions and
+idempotency records. Customer evidence is upserted by session ID in the bridge.
 
-No tool talks to a Google SDK directly. Each dependency has an adapter in
-`tools/shared/` with two implementations, chosen by the `USE_MOCK` env flag:
+The `Real*` Google adapters and ADK Runner execution are deferred. Setting
+`USE_MOCK=false` does not provide a working cloud implementation. TF-IDF product
+similarity and rule-based intent parsing are labeled local behavior, not Gemini.
 
-| Adapter | Factory | Mock does | Real (TODO) |
-|---------|---------|-----------|-------------|
-| `alloydb_client` | `get_alloydb()` | in-memory customers/inventory/orders/POs | AlloyDB connector + pg8000 |
-| `bigquery_client` | `get_bigquery()` | in-memory incidents bridge + canned ARIMA forecast | BigQuery + BigQuery ML |
-| `llm` | `get_llm()` | deterministic Gemini responses | Vertex AI GenerativeModel |
-| `embeddings` | `get_embeddings()` | deterministic pseudo-vectors | Vertex AI text embeddings |
-| `vector_search` | `get_vector_search()` | in-Python cosine over seed data | AlloyDB AI ScaNN SQL |
+See [the root README](../README.md) and [review fixes](../docs/REVIEW_FIXES.md).
 
-Each real implementation is a `NotImplementedError` placeholder marked
-`TODO(backend)` at the exact wiring point — search for `TODO(backend)`.
 
-## Why mock-first (no emulators)
-
-- **AlloyDB** could use a Postgres container, but a pure in-memory mock keeps
-  the demo fully offline and dependency-free for now.
-- **BigQuery ML (ARIMA_PLUS)** has no emulator at all → `forecast_stockout`
-  returns a canned prediction in mock mode.
-- **Gemini / embeddings / ScaNN** have no local equivalent → mocked.
-
-When you're ready for real GCP, implement the `RealX` classes and flip
-`USE_MOCK=false`. No tool code changes — only the adapter internals and env.
-
-## Two mock modes
-
-1. **In-process (default):** mocks compute results in Python. Zero setup.
-2. **Over HTTP:** set `MOCK_SERVER_URL` and run the mock server in `mocks/`.
-   The `llm`, `embeddings`, and bridge adapters then make real HTTP calls,
-   so you can demo the "it's calling an API" path. See `mocks/README.md`.
-
-## Usage from a tool
-
-```python
-from tools.shared import get_alloydb, get_bigquery, get_vector_search
-
-def get_customer_context(customer_id: str) -> dict:
-    db = get_alloydb()
-    customer = db.get_customer(customer_id)
-    ...
-```
-
-## Config
-
-Copy `.env.example` to `.env`. Everything is env-backed; in Cloud Run the same
-keys come from Secret Manager / `--set-env-vars`. `USE_MOCK=true` is the default.
-
-## What's NOT here yet (your lane)
-
-- `tools/aria_tools/` — 9 ARIA tool functions + FastAPI `main.py`
-- `tools/pulse_tools/` — 6 PULSE tool functions + FastAPI `main.py`
-- `tools/shared/` extras from SPEC-00: `models.py`, `auth.py`, `rate_limit.py`, `logger.py`
-- `agents/aria/`, `agents/pulse/` — ADK agent wiring (system prompts already exist)
-- `data/schema/`, `data/seed/` — real SQL
-- `tests/`
+Current tool signatures, HTTP request boundaries and workflow extensions are in
+[specs/README.md](../specs/README.md) and
+[AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md). In particular, ARIA passes the new
+demand evidence to log_session directly in Python; its legacy HTTP request model
+does not yet expose those keyword-only fields.

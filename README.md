@@ -1,210 +1,103 @@
 # ARC — Agentic Retail Command
-> AI-powered closed-loop retail intelligence for MIRA Retail
 
-**Team:** Pragmatic Engineers  
-**Competition:** AI Builder Cup 2026 — Retail & Commerce Theme  
-**Submission deadline:** Sunday, October 18, 2026
+ARC preserves the demand a completed sale can hide. A shopper accepts an
+alternative *for this week*; the original preference stays visible to the store
+manager, who can review evidence, choose an action, and observe later outcomes.
 
----
+**Team:** Pragmatic Engineers · **Theme:** Retail & Commerce
 
-## What is ARC?
+## What works in this branch
 
-ARC is a two-agent AI system that closes the loop between customer experience and retail operations at MIRA Retail — a modern UAE grocery chain.
+- **ARIA:** stateful shopping, explicit dietary and budget constraints, live local
+  inventory, substitution feedback, reviewed quotes, validated checkout, and
+  idempotent order creation.
+- **PULSE:** customer statements behind unmet demand, separate counts for satisfied
+  alternatives and temporary compromises, comparison of transfer / replenishment /
+  defer options, persistent manager decisions, and subsequent fulfillment counts.
+- **Shared local storage:** SQLite persists operational data and incidents across
+  app processes and restarts. A manager-approved discount changes the shopper's
+  catalog and price. A simulated inventory transfer makes the original product
+  available for the next local shopper.
 
-**The story in one sentence:**  
-*"A customer told ARIA she couldn't find brown rice. The store manager never read that complaint. But he ordered more brown rice anyway — because PULSE read what ARIA wrote."*
+The local orchestration and feedback parser are deterministic rules, **not live
+Gemini execution**. Google SDK/ADK execution, AlloyDB, BigQuery ML, and deployment
+are deferred integrations. `USE_MOCK=false` does not turn them on. The architecture
+and deployment documents distinguish working local behavior from the intended
+cloud system; they do not claim a completed cloud deployment. SQLite is a single-host prototype, not shared storage across
+independently deployed Cloud Run instances.
 
-### The two agents
+## Run the complete local prototype
 
-| Agent | Role | Audience | Technology |
-|-------|------|----------|------------|
-| **ARIA** | Customer Experience Agent | Shoppers | Google ADK + Gemini 1.5 Pro |
-| **PULSE** | Operations Intelligence Agent | Store Managers | Google ADK + Gemini 1.5 Pro |
-
-### The bridge
-
-A **BigQuery incidents table** that ARIA writes to after every customer session and PULSE reads from to detect patterns. This bridge is the architectural innovation — it makes the two agents a system rather than two separate tools.
-
----
-
-## Architecture overview
-
-```
-Customer chat (Streamlit)          Manager dashboard (Streamlit + Looker)
-        │                                        │
-        ▼                                        ▼
-ARIA — CX Agent                        PULSE — OPS Agent
-Google ADK + Gemini 1.5 Pro            Google ADK + Gemini 1.5 Pro
-Vertex AI Agent Engine                 Vertex AI Agent Engine
-        │                                        │
-        ▼                                        ▼
-ARIA tool functions (9)                PULSE tool functions (6)
-Cloud Run Functions · Python           Cloud Run Functions · Python
-        │                                        │
-        ▼                                        ▼
-AlloyDB for PostgreSQL ←──────────────────────────
-(customer_profiles, inventory,
- orders, promotions, purchase_orders)
-        │
-        ▼
-BigQuery bridge ←── ARIA writes ──── PULSE reads ──→
-(incidents, inventory_log, promotion_log)
-```
-
----
-
-## Repository structure
-
-```
-arc/
-├── README.md                    ← you are here
-├── ARCHITECTURE.md              ← detailed system design
-├── DATA_MODEL.md                ← AlloyDB + BigQuery schemas
-├── AGENT_CONTRACTS.md           ← tool function API contracts
-├── DEPLOYMENT.md                ← GCP setup + deploy guide
-├── CONTRIBUTING.md              ← dev setup + conventions
-├── SPEC.md                      ← full product specification
-├── .env.example                 ← environment variable template
-├── .gitignore
-│
-├── agents/
-│   ├── aria/
-│   │   ├── agent.py             ← Google ADK agent definition
-│   │   ├── system_prompt.txt    ← ARIA system prompt
-│   │   ├── tools.py             ← tool bindings
-│   │   ├── main.py              ← Cloud Run entry point
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   └── pulse/
-│       ├── agent.py             ← Google ADK agent definition
-│       ├── system_prompt.txt    ← PULSE system prompt
-│       ├── tools.py             ← tool bindings
-│       ├── main.py              ← Cloud Run entry point
-│       ├── Dockerfile
-│       └── requirements.txt
-│
-├── tools/
-│   ├── aria_tools/
-│   │   ├── __init__.py
-│   │   ├── parse_intent.py
-│   │   ├── get_customer_context.py
-│   │   ├── build_cart.py
-│   │   ├── check_stock.py
-│   │   ├── suggest_substitution.py
-│   │   ├── optimize_budget.py
-│   │   ├── apply_promotion.py
-│   │   ├── place_order.py
-│   │   └── log_session.py
-│   ├── pulse_tools/
-│   │   ├── __init__.py
-│   │   ├── detect_patterns.py
-│   │   ├── find_root_cause.py
-│   │   ├── predict_stockout.py
-│   │   ├── draft_purchase_order.py
-│   │   └── calculate_impact.py
-│   ├── shared/
-│   │   ├── __init__.py
-│   │   ├── alloydb_client.py    ← AlloyDB connection + queries
-│   │   ├── bigquery_client.py   ← BigQuery client
-│   │   └── models.py            ← shared Pydantic models
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── aria-app/                ← Next.js 14 customer ecommerce app
-│   │   ├── app/
-│   │   │   ├── layout.tsx
-│   │   │   └── page.tsx         ← main store page
-│   │   ├── components/
-│   │   │   ├── NavBar.tsx
-│   │   │   ├── CategorySidebar.tsx
-│   │   │   ├── ProductGrid.tsx
-│   │   │   ├── AriaPanel.tsx    ← ARIA chat + live cart
-│   │   │   └── ReasoningDrawer.tsx
-│   │   ├── context/
-│   │   │   └── CartContext.tsx
-│   │   ├── Dockerfile
-│   │   ├── package.json
-│   │   └── tailwind.config.ts
-│   └── pulse-dashboard/         ← Streamlit manager dashboard
-│       ├── pulse_dashboard.py
-│       ├── components/
-│       │   ├── alert_card.py
-│       │   └── po_approval.py
-│       ├── Dockerfile
-│       └── requirements.txt
-│
-├── data/
-│   ├── schema/
-│   │   ├── alloydb_schema.sql   ← AlloyDB DDL
-│   │   └── bigquery_schema.sql  ← BigQuery DDL
-│   └── seed/
-│       ├── customer_profiles.sql
-│       ├── inventory.sql
-│       ├── promotions.sql
-│       └── replenishment.sql
-│
-├── infrastructure/
-│   ├── cloudbuild.yaml          ← CI/CD pipeline
-│   ├── alloydb_setup.sh         ← AlloyDB cluster + instance
-│   └── bigquery_setup.sh        ← BigQuery dataset + tables
-│
-└── tests/
-    ├── test_aria_tools.py
-    ├── test_pulse_tools.py
-    └── test_bridge.py
-```
-
----
-
-## Quick start
+Use Python 3.11+ and Node 18.17+ with npm. From the repository root:
 
 ```bash
-git clone https://github.com/pragmatic-engineers/arc
-cd arc
-python -m venv venv && source venv/bin/activate
-pip install google-adk google-cloud-bigquery google-cloud-aiplatform \
-            google-cloud-alloydb-connector pg8000 streamlit \
-            google-cloud-secret-manager pydantic
-
-gcloud auth application-default login
-gcloud config set project mira-arc-hackathon
-
-# See DEPLOYMENT.md for full setup
+uv sync --group dev
+uv pip install -r frontend/pulse-dashboard/requirements.txt
+npm --prefix frontend/aria-app ci
+.venv/bin/python scripts/run_local.py
 ```
 
----
+Open the store at **http://localhost:3000** and PULSE at
+**http://localhost:8501**. The launcher starts ARIA at `127.0.0.1:8001`, configures
+both apps to use the same local stores, and shuts down its children on Ctrl+C.
+The store always calls the backend; it never silently substitutes a fake order.
 
-## Technology stack
+The launcher uses `data/local/incidents.sqlite` and
+`data/local/operations.sqlite`. To run an independent fresh demo without deleting
+existing data:
 
-| Layer | Technology |
-|-------|-----------|
-| Agent framework | Google ADK (`google-adk`) |
-| LLM | Gemini 1.5 Pro + Gemini 1.5 Flash (Vertex AI) |
-| Agent hosting | Vertex AI Agent Engine |
-| Tool execution | Cloud Run Functions (Python) — 9 ARIA + 6 PULSE |
-| Operational DB | AlloyDB for PostgreSQL + AlloyDB AI (ScaNN vector) |
-| Analytics bridge | BigQuery + BigQuery ML |
-| ARIA frontend | Next.js 14 (App Router, TypeScript, Tailwind CSS) |
-| PULSE frontend | Streamlit (Cloud Run) |
-| Analytics UI | Looker Studio (embedded in PULSE dashboard) |
-| CI/CD | Cloud Build + Artifact Registry |
-| Secrets | Secret Manager |
-| Monitoring | Cloud Monitoring + Cloud Logging |
+```bash
+.venv/bin/python scripts/run_local.py --data-dir /tmp/arc-fresh-demo
+```
 
----
+If the usual ports are occupied, pass `--web-port 3100 --aria-port 8002
+--pulse-port 8502`. Each launcher uses an isolated Next.js build directory.
 
-## Demo script (5 minutes)
+For separate terminals, export the same **absolute** `ARC_BRIDGE_DB` and
+`ARC_STATE_DB` paths in each Python service, set `USE_MOCK=true`, and set the
+Next.js `ARIA_AGENT_URL` to the ARIA service URL. Never use the same SQLite file
+for both databases: their transactions use separate connections.
 
-| Time | Scene |
-|------|-------|
-| 0:00–1:30 | Sarah chats with ARIA → cart builds → stockout flagged → substitution offered → order placed → session logged to BigQuery |
-| 1:30–2:00 | BigQuery bridge — new incident row visible |
-| 2:00–3:00 | Ahmed's dashboard → PULSE surfaces stockout pattern → root cause + evidence → PO draft → one-click approval |
-| 3:00–3:45 | PULSE perishable alert — Almarai Laban not selling fast enough → 25% discount proposed → Ahmed approves → discount_active=True |
-| 3:45–4:15 | ARIA surfaces the discount to next customer naturally → "Almarai Laban on 25% discount today — AED 6 instead of AED 8. Want to add it?" |
-| 4:15–5:00 | Architecture diagram — the full loop closes. Phase 2 roadmap. |
+## Try the distinguishing workflow
 
----
+1. Ask ARIA: **“Weekly halal groceries, family of 4, AED 300. Include brown rice.”**
+2. Choose **Temporary compromise** for the proposed alternative. Review and
+   confirm the basket. The order succeeds; the original preference remains unmet.
+3. Open PULSE. Inspect the customer evidence and distinguish your live local
+   session from the labeled synthetic seed sessions.
+4. Compare actions and approve **transfer**. This simulates a stock movement
+   while preserving the source store's safety stock.
+5. Start a new shopper session (Continue shopping after checkout) and request
+   **“Brown rice please, AED 30.”** Confirm it. PULSE shows an observed fulfilled
+   request after the decision. This is descriptive monitoring, not causal proof.
+6. Approve the Laban discount in PULSE. The store catalog refreshes within ten
+   seconds. A new Laban request quotes the approved price.
 
-*MIRA Retail · ARC v1.0 · Pragmatic Engineers · AI Builder Cup 2026*
+See [the three-minute demo](docs/DEMO.md), [review fixes and limitations](docs/REVIEW_FIXES.md),
+and [evaluation](docs/EVALUATION.md).
+
+## Validate
+
+```bash
+.venv/bin/python -m pytest
+.venv/bin/ruff check agents tools frontend/pulse-dashboard scripts tests
+.venv/bin/mypy agents tools frontend/pulse-dashboard/data_provider.py
+.venv/bin/python -m scripts.evaluate_demand
+npm --prefix frontend/aria-app run build
+```
+
+Tests cover real endpoint-to-storage behavior, separate processes, concurrent
+checkout, rollback, stale quotes, explicit customer evidence, action idempotency,
+and the manager-to-shopper loop. All customer and velocity seed data is synthetic;
+modeled revenue is labeled as an estimate. No retail performance claim is made.
+
+
+## Specifications and implementation status
+
+[ARC_SPEC.md](ARC_SPEC.md) is the current product specification (1.1).
+[ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md) and
+[AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) describe actual local execution and
+explicit future integration boundaries. [The specification index](specs/README.md)
+links the tool/workflow details and generated OpenAPI snapshots. Operational setup
+is in [DEPLOYMENT.md](DEPLOYMENT.md); contribution checks are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Google-oriented assets remain planned work.

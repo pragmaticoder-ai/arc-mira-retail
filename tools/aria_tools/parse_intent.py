@@ -22,7 +22,7 @@ logger = get_logger("aria.parse_intent")
 router = APIRouter()
 
 _INJECTION = re.compile(
-    r"(\bDROP\b|\bSELECT\s+\*|\bINSERT\b|\bDELETE\b|--|;|<script>|javascript:)",
+    r"(\bDROP\b|\bSELECT\s+\*|\bINSERT\b|\bDELETE\b|--|<script>|javascript:)",
     re.IGNORECASE,
 )
 _VALID_DIET = {"halal", "vegetarian", "vegan", "none"}
@@ -50,10 +50,13 @@ def parse_intent(customer_message: str) -> dict:
     # ── Extract via LLM adapter (heuristic in mock mode) ─────────────
     low = msg.lower()
     dietary = "none"
-    for d in ("halal", "vegetarian", "vegan"):
+    for d in ("vegan", "vegetarian", "halal"):
         if d in low:
             dietary = d
             break
+
+    if dietary == "none" and any(w in low for w in ("no meat", "meat-free")):
+        dietary = "vegan" if any(phrase in low for phrase in ("no dairy", "no meat or dairy")) else "vegetarian"
 
     budget = None
     m = re.search(r"(?:aed|dhs?|dirhams?)\s*([0-9]+(?:\.[0-9]+)?)", low) or re.search(
@@ -71,7 +74,7 @@ def parse_intent(customer_message: str) -> dict:
 
     # Goal: let the LLM classify; keep the raw phrase as the goal text.
     get_llm()  # touch adapter (routes to mock server if configured)
-    goal = msg if len(msg) <= 60 else "grocery shopping"
+    goal = msg
     if not goal.strip():
         goal = "grocery shopping"
 
@@ -80,8 +83,8 @@ def parse_intent(customer_message: str) -> dict:
         dietary = "none"
     if urgency not in _VALID_URGENCY:
         urgency = "normal"
-    if budget is not None and budget <= 0:
-        budget = None
+    if budget is not None and not 0 < budget <= 10000:
+        return error("VALIDATION_ERROR", "Budget must be between AED 0 and AED 10000")
 
     result = {
         "goal": goal,

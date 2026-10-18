@@ -58,13 +58,13 @@ class MockVectorSearch(VectorSearch):
         exclude_product_id: str | None = None,
         limit: int = 1,
     ) -> list[dict]:
-        from tools.shared.mock_inventory import MOCK_INVENTORY
+        from tools.shared.alloydb_client import get_alloydb
 
         emb = get_embeddings()
         q = emb.embed(query_text)
 
         candidates: list[dict] = []
-        for p in MOCK_INVENTORY:
+        for p in get_alloydb().list_inventory(store_id):
             if p["store_id"] != store_id:
                 continue
             if p["product_id"] == exclude_product_id:

@@ -1,201 +1,60 @@
-# SPEC-PULSE-03: predict_stockout
-> MIRA Retail · ARC Project · PULSE OPS Agent
-> Version 1.0 | Status: Draft
+# SPEC-PULSE-03 — predict_stockout
 
----
+Updated October 18, 2026 · Specification 1.1 · Implemented local behavior
 
-## 1. OVERVIEW
+## 1. Purpose and status
 
-**Function:** `predict_stockout`  
-**Agent:** PULSE (OPS Agent)  
-**Layer:** Tool function → Cloud Run → FastAPI → BigQuery ML  
-**Purpose:** Use BigQuery ML ARIMA_PLUS model to forecast when a product will next run out of stock. Only surfaces predictions with confidence >= 0.70.
+Implemented local tool. Processing behavior and limits are specified below.
 
-**Why it exists:** Root cause analysis tells you why something went wrong. Prediction tells you what will go wrong next. PULSE combining both makes it genuinely proactive — not just reacting to past stockouts but preventing future ones.
+Google execution/adapters remain deferred. This specification supersedes the
+original cloud-first implementation plan for this tool.
 
----
+## 2. Interfaces
 
-## 2. INPUTS
-
-| Field | Type | Required | Constraints |
-|-------|------|----------|-------------|
-| `product_id` | string | Yes | Must exist in inventory |
-| `store_id` | string | Yes | Must exist in stores |
-| `forecast_days` | integer | No | 1–30, default 7 |
-
----
-
-## 3. STEP BY STEP LOGIC
-
-```
-Step 1: Validate inputs
-
-Step 2: Query current stock level from AlloyDB
-        → SELECT stock_quantity FROM inventory
-          WHERE product_id = $1 AND store_id = $2
-
-Step 3: Calculate daily consumption rate from BigQuery
-        → Query incidents table for last 30 days of order data
-        → daily_rate = total_units_ordered / days_in_period
-
-Step 4: Call BigQuery ML forecast
-        → ML.FORECAST(MODEL arc_dataset.demand_forecast,
-                      STRUCT($forecast_days AS horizon))
-          WHERE product_id = $1
-
-Step 5: Calculate days_until_stockout
-        → days_until = stock_quantity / daily_consumption_rate
-
-Step 6: Confidence check
-        → If confidence < 0.70: return null predicted_stockout_date
-          (still return confidence score so PULSE knows why it's not surfaced)
-
-Step 7: Return PredictStockoutResponse
-```
-
----
-
-## 4. VALIDATIONS & SANITY CHECKS
-
-### Input validations
-| Check | Rule | Error code |
-|-------|------|------------|
-| product_id exists | In inventory | NOT_FOUND |
-| store_id exists | In stores | NOT_FOUND |
-| forecast_days range | 1–30 | VALIDATION_ERROR |
-
-### Output sanity checks
-| Check | Rule |
-|-------|------|
-| confidence range | 0.0 <= confidence <= 1.0 |
-| Only surface >= 0.70 | predicted_stockout_date null if confidence < 0.70 |
-| predicted_date future | Must be after current timestamp |
-| days_until_stockout >= 0 | Cannot be negative |
-| daily_consumption_rate > 0 | Must be positive |
-| current_stock >= 0 | Non-negative |
-
----
-
-## 5. OUTPUTS
-
-**High confidence:**
-```json
-{
-  "predicted_stockout_date": "2026-10-21",
-  "days_until_stockout": 4,
-  "confidence": 0.87,
-  "current_stock": 12,
-  "daily_consumption_rate": 3.2,
-  "evidence": {
-    "model": "BigQuery ML ARIMA_PLUS",
-    "training_period": "Oct 1 - Oct 16 2026",
-    "data_points_used": 480
-  }
-}
-```
-
-**Low confidence:**
-```json
-{
-  "predicted_stockout_date": null,
-  "days_until_stockout": null,
-  "confidence": 0.52,
-  "current_stock": 45,
-  "daily_consumption_rate": 2.1,
-  "evidence": {
-    "model": "BigQuery ML ARIMA_PLUS",
-    "training_period": "Oct 1 - Oct 16 2026",
-    "data_points_used": 240
-  }
-}
-```
-
----
-
-## 6. ERROR CASES
-
-| Scenario | Error code | retry_suggested |
-|----------|------------|-----------------|
-| BigQuery ML model not trained | BIGQUERY_ML_ERROR | false |
-| BQ connection failed | BIGQUERY_ERROR | true |
-| product_id not found | NOT_FOUND | false |
-| confidence < 0.70 | Returns null date (not error) | — |
-
----
-
-## 7. UNIT TESTS
+Source: [tools/pulse_tools/predict_stockout.py](../tools/pulse_tools/predict_stockout.py).
 
 ```python
-# TC-PULSE-03-U01: High confidence prediction surfaced
-def test_predict_stockout_high_confidence():
-    """
-    Given: BQ ML returns confidence=0.87, 4 days to stockout
-    When: predict_stockout called
-    Then: predicted_stockout_date populated, days_until_stockout=4
-    """
-
-# TC-PULSE-03-U02: Low confidence — null date returned
-def test_predict_stockout_low_confidence():
-    """
-    Given: BQ ML returns confidence=0.52
-    When: predict_stockout called
-    Then: predicted_stockout_date=null, confidence=0.52 returned
-    """
-
-# TC-PULSE-03-U03: confidence always in valid range
-def test_predict_stockout_confidence_range():
-    """
-    Given: Any BQ ML response
-    When: predict_stockout called
-    Then: 0.0 <= confidence <= 1.0 always
-    """
-
-# TC-PULSE-03-U04: days_until_stockout non-negative
-def test_predict_stockout_positive_days():
-    """
-    Given: stock=10, daily_rate=2.5
-    When: predict_stockout called
-    Then: days_until_stockout=4 (not negative)
-    """
-
-# TC-PULSE-03-U05: evidence block populated
-def test_predict_stockout_evidence():
-    """
-    Given: BQ ML model trained on 30 days data
-    When: predict_stockout called
-    Then: evidence.model, training_period, data_points_used all non-empty
-    """
+predict_stockout(product_id: str, store_id: str, forecast_days: int=7) -> dict
 ```
 
----
+HTTP request model `PredictStockoutRequest`:
 
-## 8. INTEGRATION TESTS
+- `product_id: str` (required)
+- `store_id: str` (required)
+- `forecast_days: int` = `7`
 
-```python
-# TC-PULSE-03-I01: BigQuery emulator ML query
-def test_predict_stockout_bq_emulator(bq_client):
-    """
-    Given: demand_forecast model created in BigQuery emulator
-    When: predict_stockout queries emulator
-    Then: Returns forecast response without error
-    Note: Actual ML accuracy tested in staging vs real BigQuery ML
-    """
-```
+The exact POST route and framework schema are in
+[openapi_pulse_tools.yaml](openapi_pulse_tools.yaml). Python-only arguments
+are not implicitly accepted over HTTP.
 
----
+## 3. Processing behavior
 
-## 9. NON-FUNCTIONAL REQUIREMENTS
+In local mode, calculate a depletion scenario from current store stock and a seeded daily velocity. The forecast adapter is not a trained BigQuery ML model. Its 0.82 confidence fixture is illustrative and must be labeled; the tool suppresses dates when a supplied confidence is below 0.70.
 
-| Requirement | Specification |
-|-------------|---------------|
-| **Auth** | IAM Bearer token required |
-| **Rate limit** | 10 requests/minute per IP (BigQuery ML heavy) |
-| **Timeout** | BigQuery ML query within 30 seconds |
-| **Retry** | On BQ timeout: retry once after 10 seconds |
-| **Threshold** | confidence < 0.70 → suppress prediction (never show low-confidence to manager) |
-| **Latency SLA** | p95 < 20 seconds (ML inference) |
-| **Logging** | Log: product_id, confidence, days_until_stockout, latency_ms |
+## 4. Validation and limits
 
----
+Existing product; forecast_days 1–30. The local scenario records horizon context but does not restrict depletion dates to that horizon or prove forecast calibration. Google forecasting remains deferred.
 
-*MIRA Retail · ARC v1.0 · SPEC-PULSE-03 v1.0*
+## 5. Response
+
+surfaced, predicted_stockout_date, days_until_stockout, confidence, current_stock, daily_consumption_rate, evidence with synthetic model/velocity/confidence notes. Suppressed dates/day counts are null.
+
+## 6. Persistence and errors
+
+Use shared adapter interfaces and the storage mode in
+[DATA_MODEL.md](../DATA_MODEL.md). Operational state and incidents have separate
+transaction boundaries. Tools return the standard error dictionary on business
+validation failures; the HTTP wrapper generally retains 200 for that dictionary.
+Request-model failures use 422; tool-router auth/rate limits use 401/429.
+See [AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md) for the agent-facing error mapping.
+
+## 7. Verification
+
+- Existing `test_pulse03*` cases in
+  [tests/unit/pulse/test_pulse_tools.py](../tests/unit/pulse/test_pulse_tools.py).
+- Cross-surface regressions in
+  [tests/integration/test_demand_loop.py](../tests/integration/test_demand_loop.py).
+- HTTP shape coverage in
+  [tests/contract/test_agent_contract.py](../tests/contract/test_agent_contract.py).
+
+These are local tests, not evidence of a deployed Google integration.

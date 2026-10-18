@@ -76,7 +76,7 @@ export function ProductCard({ product, added, onAdd }: ProductCardProps) {
               : 'btn-primary mt-sm w-full'
         }
       >
-        {outOfStock ? 'Unavailable' : added ? '✓ Added by ARIA' : 'Add to cart'}
+        {outOfStock ? 'Unavailable' : added ? 'In basket · add one' : 'Add to cart'}
       </button>
     </div>
   )

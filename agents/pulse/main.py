@@ -9,10 +9,15 @@ Mock mode (default) runs a deterministic cycle over the real PULSE tools.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 from tools.pulse_tools.calculate_impact import calculate_impact
+from tools.pulse_tools.demand_intelligence import (
+    decide_demand,
+    decide_discount,
+    demand_insights,
+)
 from tools.pulse_tools.detect_patterns import detect_patterns
 from tools.pulse_tools.draft_purchase_order import draft_purchase_order
 from tools.pulse_tools.execute_perishable_discount import execute_perishable_discount
@@ -27,8 +32,8 @@ app = FastAPI(title="ARC PULSE Agent", version="1.0.0")
 
 class AnalyzeRequest(BaseModel):
     store_id: str = "dubai_marina_01"
-    hours: int = 48
-    min_incidents: int = 5
+    hours: int = Field(default=48, ge=1, le=168)
+    min_incidents: int = Field(default=5, ge=1, le=100)
 
 
 def _cycle(req: AnalyzeRequest) -> dict:
@@ -58,19 +63,46 @@ def _cycle(req: AnalyzeRequest) -> dict:
 
     logger.info("pulse_cycle", store_id=req.store_id, alerts=len(alerts),
                 perishable=len(perishable), status="success")
-    return {"stockout_alerts": alerts, "perishable_alerts": perishable}
+    return {"stockout_alerts": alerts, "perishable_alerts": perishable,
+            "demand_insights": demand_insights(req.store_id, req.hours),
+            "mode": "local_rules", "estimates": "Illustrative modeled revenue, not measured sales recovery"}
 
 
 @app.post("/pulse/analyze")
 async def pulse_analyze(req: AnalyzeRequest) -> dict:
     if settings.use_mock:
         return _cycle(req)
-    from agents.pulse.agent import get_agent
-
-    get_agent()
-    raise NotImplementedError("Real ADK run wiring pending; set USE_MOCK=true.")
+    raise HTTPException(501, "Google ADK execution is not integrated. Use USE_MOCK=true.")
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "healthy", "service": "arc-pulse-agent", "mode": "mock" if settings.use_mock else "live"}
+
+
+class DemandDecisionRequest(BaseModel):
+    proposal_key: str
+    store_id: str
+    action: str
+
+
+@app.post("/pulse/decision")
+def demand_decision(req: DemandDecisionRequest) -> dict:
+    try:
+        return decide_demand(req.proposal_key, req.store_id, req.action)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+class DiscountDecisionRequest(BaseModel):
+    product_id: str
+    store_id: str
+    status: str
+
+
+@app.post("/pulse/discount-decision")
+def discount_decision(req: DiscountDecisionRequest) -> dict:
+    try:
+        return decide_discount(req.product_id, req.store_id, req.status)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc

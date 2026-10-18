@@ -5,6 +5,9 @@ Wraps the 6 PULSE tool functions as ADK FunctionTools.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from google.adk.tools import FunctionTool
 
 from tools.pulse_tools.calculate_impact import calculate_impact
@@ -14,7 +17,7 @@ from tools.pulse_tools.execute_perishable_discount import execute_perishable_dis
 from tools.pulse_tools.find_root_cause import find_root_cause
 from tools.pulse_tools.predict_stockout import predict_stockout
 
-PULSE_FUNCTIONS = [
+PULSE_FUNCTIONS: list[Callable[..., Any]] = [
     detect_patterns,
     find_root_cause,
     predict_stockout,

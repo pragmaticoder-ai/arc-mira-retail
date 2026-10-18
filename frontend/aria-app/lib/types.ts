@@ -100,6 +100,7 @@ export interface CartState {
   items: CartItem[]
   total_aed: number
   promotion: AppliedPromotion | null
+  quote_id?: string | null
 }
 
 export interface OrderConfirmation {
@@ -116,7 +117,26 @@ export interface AriaChatRequest {
   message: string
 }
 
+export interface DemandSignal {
+  product_id: string
+  product_name: string
+  outcome: 'satisfied' | 'compromise' | 'rejected' | 'abandoned' | 'fulfilled' | 'unknown'
+  evidence: string
+  certainty: string
+}
+export interface SubstitutionOffer {
+  product_id: string
+  product_name: string
+  substitute_product_id: string | null
+  substitute_name: string | null
+  outcome: string
+}
 export interface AriaChatResponse {
+  session_id: string
+  quote_id: string | null
+  demand_signals: DemandSignal[]
+  substitution_offers: SubstitutionOffer[]
+  mode: string
   reply: string
   cart: CartState
   reasoning: ReasoningStep[]

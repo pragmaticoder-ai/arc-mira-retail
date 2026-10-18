@@ -25,7 +25,7 @@ export function CategorySidebar({
   onBudgetChange,
 }: CategorySidebarProps) {
   return (
-    <aside className="flex w-[200px] shrink-0 flex-col gap-lg overflow-y-auto border-r border-slate-200 bg-slate-100 p-md">
+    <aside className="hidden md:flex w-[200px] shrink-0 flex-col gap-lg overflow-y-auto border-r border-slate-200 bg-slate-100 p-md">
       <div>
         <h2 className="mb-sm text-xs font-medium uppercase tracking-wide text-slate-400">
           Categories

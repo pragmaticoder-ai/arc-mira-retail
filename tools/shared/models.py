@@ -8,6 +8,7 @@ document the shapes and are reused by tests (contract validation).
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -217,3 +218,25 @@ class DraftPOResponse(BaseModel):
     status: str = "pending"
     human_approval_required: bool = True
     created_at: str
+
+
+class DemandSignal(BaseModel):
+    """Structured evidence boundary for the future Google model integration."""
+    product_id: str
+    product_name: str
+    outcome: Literal["satisfied", "compromise", "rejected", "abandoned", "fulfilled", "unknown"]
+    substitute_product_id: str | None = None
+    evidence: str = Field(max_length=1000)
+    evidence_source: str
+    certainty: Literal["explicit", "observed", "unknown"]
+
+
+class ActionDecision(BaseModel):
+    proposal_key: str
+    store_id: str
+    product_id: str
+    action: Literal["transfer", "replenish", "defer"]
+    status: Literal["approved"]
+    quantity: int = Field(ge=0)
+    baseline: dict[str, int]
+    decided_at: str

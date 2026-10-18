@@ -27,17 +27,6 @@ def _reset_state():
     adb._client = None
     bqc._client = None
 
-    # Session-scoped caches inside tool modules.
-    try:
-        import tools.aria_tools.apply_promotion as ap
-        ap._applied_this_session.clear()
-    except Exception:
-        pass
-    try:
-        import tools.aria_tools.place_order as po
-        po._recent.clear()
-    except Exception:
-        pass
     yield
     adb._client = None
     bqc._client = None

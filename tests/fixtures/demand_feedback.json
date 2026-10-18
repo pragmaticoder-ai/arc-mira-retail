@@ -1,0 +1,22 @@
+[
+  {"message":"The pasta is okay this time, but I still want rice next week.","expected":"compromise","accepted":true},
+  {"message":"I'll take it for now.","expected":"compromise","accepted":true},
+  {"message":"Fine, but next time please have brown rice.","expected":"compromise","accepted":true},
+  {"message":"I still prefer the original, but add this.","expected":"compromise","accepted":true},
+  {"message":"This is a temporary replacement.","expected":"compromise","accepted":true},
+  {"message":"I am happy with this alternative.","expected":"satisfied","accepted":true},
+  {"message":"That works for me.","expected":"satisfied","accepted":true},
+  {"message":"It is equally good. Add it.","expected":"satisfied","accepted":true},
+  {"message":"I prefer the substitute.","expected":"satisfied","accepted":true},
+  {"message":"A great alternative, thank you.","expected":"satisfied","accepted":true},
+  {"message":"No thanks, only brown rice.","expected":"rejected","accepted":false},
+  {"message":"I do not want that alternative.","expected":"rejected","accepted":false},
+  {"message":"I'm not satisfied with that option.","expected":"rejected","accepted":false},
+  {"message":"No substitute please.","expected":"rejected","accepted":false},
+  {"message":"That doesn't work for me.","expected":"rejected","accepted":false},
+  {"message":"Cancel the basket.","expected":"abandoned","accepted":false},
+  {"message":"I'll leave without buying.","expected":"abandoned","accepted":false},
+  {"message":"Maybe.","expected":"unknown","accepted":true},
+  {"message":"Tell me more about this brand.","expected":"unknown","accepted":false},
+  {"message":"Yes.","expected":"unknown","accepted":true}
+]

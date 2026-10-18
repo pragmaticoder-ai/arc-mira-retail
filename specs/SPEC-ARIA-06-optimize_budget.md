@@ -1,209 +1,60 @@
-# SPEC-ARIA-06: optimize_budget
-> MIRA Retail · ARC Project · ARIA CX Agent
-> Version 1.0 | Status: Draft
+# SPEC-ARIA-06 — optimize_budget
 
----
+Updated October 18, 2026 · Specification 1.1 · Implemented local behavior
 
-## 1. OVERVIEW
+## 1. Purpose and status
 
-**Function:** `optimize_budget`  
-**Agent:** ARIA (CX Agent)  
-**Layer:** Tool function → Cloud Run → FastAPI → Gemini reasoning  
-**Purpose:** When a cart exceeds the customer's budget, intelligently trim or swap items to bring the total within the target. Explains every change made to the customer.
+Implemented local tool. Processing behavior and limits are specified below.
 
-**Why it exists:** Customers set budgets and expect them to be respected. Rather than presenting an over-budget cart and asking the customer to figure out what to remove, ARIA handles it intelligently — removing the least impactful items and explaining each change.
+Google execution/adapters remain deferred. This specification supersedes the
+original cloud-first implementation plan for this tool.
 
----
+## 2. Interfaces
 
-## 2. INPUTS
-
-| Field | Type | Required | Constraints |
-|-------|------|----------|-------------|
-| `cart` | array | Yes | Min 1 item |
-| `target_budget_aed` | float | Yes | > 0 |
-| `dietary_preference` | enum | Yes | halal, vegetarian, vegan, none |
-
----
-
-## 3. STEP BY STEP LOGIC
-
-```
-Step 1: Validate inputs
-        → Cart has at least 1 item
-        → target_budget_aed > 0
-        → All cart items have valid product_id, quantity > 0, price_aed > 0
-
-Step 2: Calculate current total
-        → current_total = SUM(item.price_aed * item.quantity)
-        → If current_total <= target_budget_aed → return cart unchanged
-
-Step 3: Calculate overage
-        → overage = current_total - target_budget_aed
-
-Step 4: Call Gemini 1.5 Flash to select optimisation strategy
-        → Prompt: given cart items and overage, which items to reduce/remove
-          with least impact on meal planning?
-        → Strategy priority:
-           1. Reduce quantity of premium items (e.g. 2x butter → 1x butter)
-           2. Swap to cheaper brand in same category
-           3. Remove lowest-priority item (snacks before staples)
-
-Step 5: Apply changes
-        → Remove or reduce items per Gemini recommendation
-        → Recalculate total after each change
-        → Stop when total <= target_budget_aed
-
-Step 6: Validate result
-        → new_total_aed must be <= target_budget_aed
-        → new_total_aed must be >= target_budget_aed * 0.85
-        → All dietary restrictions still respected
-        → At least 1 item remains in cart
-
-Step 7: Return OptimizeBudgetResponse
-        → updated_cart, new_total_aed, changes_made
-```
-
----
-
-## 4. VALIDATIONS & SANITY CHECKS
-
-### Input validations
-| Check | Rule | Error code |
-|-------|------|------------|
-| cart not empty | len(cart) >= 1 | VALIDATION_ERROR |
-| target_budget positive | > 0 | VALIDATION_ERROR |
-| all items valid | product_id non-empty, quantity >= 1, price_aed > 0 | VALIDATION_ERROR |
-| dietary_preference valid | halal, vegetarian, vegan, none | VALIDATION_ERROR |
-
-### Output sanity checks
-| Check | Rule |
-|-------|------|
-| Budget met | new_total_aed <= target_budget_aed |
-| Not over-trimmed | new_total_aed >= target_budget_aed * 0.85 |
-| Cart not empty | len(updated_cart) >= 1 |
-| Dietary maintained | No dietary violations introduced |
-| Changes explained | len(changes_made) > 0 if any changes were made |
-| Action valid | action must be: removed, reduced_quantity, swapped_brand |
-
----
-
-## 5. OUTPUTS
-
-```json
-{
-  "updated_cart": [
-    {
-      "product_id": "milk_almarai_2l",
-      "product_name": "Almarai Full Fat Milk 2L",
-      "quantity": 1,
-      "price_aed": 12.00,
-      "aisle_ref": "A2",
-      "in_stock": true
-    }
-  ],
-  "new_total_aed": 287.00,
-  "changes_made": [
-    {
-      "action": "reduced_quantity",
-      "product_name": "Almarai Full Fat Milk 2L",
-      "saving_aed": 12.00
-    }
-  ]
-}
-```
-
----
-
-## 6. ERROR CASES
-
-| Scenario | Error code | retry_suggested |
-|----------|------------|-----------------|
-| Cart empty | VALIDATION_ERROR | false |
-| target_budget <= 0 | VALIDATION_ERROR | false |
-| Cannot reach budget (all essentials) | UNPROCESSABLE | false |
-| Gemini reasoning failed | INTERNAL_ERROR | true |
-
----
-
-## 7. UNIT TESTS
+Source: [tools/aria_tools/optimize_budget.py](../tools/aria_tools/optimize_budget.py).
 
 ```python
-# TC-ARIA-06-U01: Cart already within budget — no changes
-def test_optimize_budget_already_within():
-    """
-    Given: Cart total AED 280, target AED 300
-    When: optimize_budget called
-    Then: Returns original cart unchanged, changes_made=[]
-    """
-
-# TC-ARIA-06-U02: Reduce quantity of one item
-def test_optimize_budget_reduce_quantity():
-    """
-    Given: Cart total AED 320, target AED 300
-    When: optimize_budget called
-    Then: new_total_aed <= 300, at least one item has reduced quantity
-    """
-
-# TC-ARIA-06-U03: Result not over-trimmed
-def test_optimize_budget_not_over_trimmed():
-    """
-    Given: Cart total AED 340, target AED 300
-    When: optimize_budget called
-    Then: new_total_aed >= 255 (85% of 300)
-    """
-
-# TC-ARIA-06-U04: Dietary maintained after optimization
-def test_optimize_budget_dietary_maintained():
-    """
-    Given: Halal cart, target budget requires removal
-    When: optimize_budget called
-    Then: All remaining items still have halal dietary_flags
-    """
-
-# TC-ARIA-06-U05: Cart not emptied
-def test_optimize_budget_cart_not_empty():
-    """
-    Given: Single item cart that exceeds budget
-    When: optimize_budget called
-    Then: Cart still has at least 1 item, UNPROCESSABLE if impossible
-    """
-
-# TC-ARIA-06-U06: changes_made explains all changes
-def test_optimize_budget_changes_explained():
-    """
-    Given: 2 items removed from cart
-    When: optimize_budget called
-    Then: changes_made has 2 entries, one per change
-    """
+optimize_budget(cart: list[dict], target_budget_aed: float, dietary_preference: str='none') -> dict
 ```
 
----
+HTTP request model `OptimizeBudgetRequest`:
 
-## 8. INTEGRATION TESTS
+- `cart: list[dict]` (required)
+- `target_budget_aed: float` (required)
+- `dietary_preference: str` = `'none'`
 
-```python
-# TC-ARIA-06-I01: Full optimization flow
-def test_optimize_budget_full_flow():
-    """
-    Given: Cart with 10 items totaling AED 350, target AED 300
-    When: optimize_budget called with Gemini mock
-    Then: Returns cart with total <= AED 300
-    """
-```
+The exact POST route and framework schema are in
+[openapi_aria_tools.yaml](openapi_aria_tools.yaml). Python-only arguments
+are not implicitly accepted over HTTP.
 
----
+## 3. Processing behavior
 
-## 9. NON-FUNCTIONAL REQUIREMENTS
+Standalone greedy budget helper: reduce expensive-line quantities and remove lines until the target is met, retaining at least one item. Return each change. The local chat path instead fits generated lines incrementally; it does not automatically call this helper.
 
-| Requirement | Specification |
-|-------------|---------------|
-| **Auth** | IAM Bearer token required |
-| **Rate limit** | 30 requests/minute per IP |
-| **Timeout** | Gemini call within 5 seconds |
-| **Retry** | On Gemini timeout: retry once |
-| **Latency SLA** | p95 < 5 seconds |
-| **Logging** | Log: original_total, target_budget, new_total, changes_count, latency_ms |
+## 4. Validation and limits
 
----
+Nonempty cart, positive target, supported diet; each line needs product ID, quantity >=1 and positive price. Return UNPROCESSABLE when the heuristic cannot reach the target or would fall below 85% of it. This helper is not authoritative inventory repricing or a general essential-item optimizer.
 
-*MIRA Retail · ARC v1.0 · SPEC-ARIA-06 v1.0*
+## 5. Response
+
+updated_cart, new_total_aed, changes_made with action/product_name/saving_aed. An already affordable basket returns no changes.
+
+## 6. Persistence and errors
+
+Use shared adapter interfaces and the storage mode in
+[DATA_MODEL.md](../DATA_MODEL.md). Operational state and incidents have separate
+transaction boundaries. Tools return the standard error dictionary on business
+validation failures; the HTTP wrapper generally retains 200 for that dictionary.
+Request-model failures use 422; tool-router auth/rate limits use 401/429.
+See [AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md) for the agent-facing error mapping.
+
+## 7. Verification
+
+- Existing `test_aria06*` cases in
+  [tests/unit/aria/test_aria_tools.py](../tests/unit/aria/test_aria_tools.py).
+- Cross-surface regressions in
+  [tests/integration/test_demand_loop.py](../tests/integration/test_demand_loop.py).
+- HTTP shape coverage in
+  [tests/contract/test_agent_contract.py](../tests/contract/test_agent_contract.py).
+
+These are local tests, not evidence of a deployed Google integration.

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.bigquery_client import get_bigquery
+from tools.shared.clock import today
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
 from tools.shared.rate_limit import limiter
@@ -24,7 +25,6 @@ logger = get_logger("pulse.execute_perishable_discount")
 router = APIRouter()
 
 # Reference "today" for the demo so the seeded expiry dates trigger predictably.
-_TODAY = date(2026, 10, 17)
 _CONVERSION = 0.60  # expected sell-through lift from the discount
 _TIERS = {1: 40.0, 2: 25.0, 3: 15.0}
 
@@ -36,7 +36,7 @@ def _days_to_expiry(expiry: str | None) -> int | None:
         d = date.fromisoformat(expiry)
     except ValueError:
         return None
-    return (d - _TODAY).days
+    return (d - today()).days
 
 
 def execute_perishable_discount(store_id: str) -> dict:
@@ -98,7 +98,7 @@ def execute_perishable_discount(store_id: str) -> dict:
                     "expiry_source": "AlloyDB inventory.expiry_date",
                     "trigger_formula": f"{dte} × {rate} = {projected} < {stock} units in stock",
                 },
-                "status": "pending",
+                "status": (db.get_decision(f"discount:{store_id}:{p['product_id']}:{p['expiry_date']}") or {}).get("status", "pending"),
                 "human_approval_required": True,
             }
         )

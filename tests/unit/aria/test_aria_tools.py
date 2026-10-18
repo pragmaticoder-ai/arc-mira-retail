@@ -164,8 +164,10 @@ def test_aria04_product_not_found(store_id):
 
 
 def test_aria04_surfaces_discount(store_id):
-    r = check_stock("laban_almarai_1l", store_id)
-    assert r["discount_active"] is True
+    from tools.pulse_tools.demand_intelligence import decide_discount
+    assert check_stock("laban_almarai_1l", store_id)["discount_active"] is False
+    decide_discount("laban_almarai_1l", store_id, "approved")
+    assert check_stock("laban_almarai_1l", store_id)["discount_active"] is True
 
 
 # ══ SPEC-ARIA-05: suggest_substitution ═══════════════════════════════
@@ -281,13 +283,13 @@ def test_aria07_highest_value_selected(store_id):
     assert r["promotion_id"] == "promo_dairy_saver"
 
 
-def test_aria07_times_applied_increment(store_id):
+def test_aria07_preview_does_not_consume_usage(store_id):
     from tools.shared.alloydb_client import get_alloydb
     db = get_alloydb()
     before = next(p["times_applied"] for p in db.list_active_promotions(store_id) if p["promotion_id"] == "promo_dairy_saver")
     apply_promotion([_mk("milk_almarai_2l", 5, 12.0)], 60.0, "none", store_id)
     after = next(p["times_applied"] for p in db.list_active_promotions(store_id) if p["promotion_id"] == "promo_dairy_saver")
-    assert after == before + 1
+    assert after == before
 
 
 # ══ SPEC-ARIA-08: place_order ════════════════════════════════════════

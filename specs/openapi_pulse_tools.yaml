@@ -1,1079 +1,344 @@
+# Generated from tools.pulse_tools.main:app.openapi() on 2026-10-18.
+# Runtime versions are preserved; specification narrative is version 1.1.
+# See ../AGENT_CONTRACTS.md for local-mode boundaries and generic response limitations.
 openapi: 3.1.0
-
 info:
-  title: ARC — PULSE Tool Functions API
+  title: ARC PULSE Tool Functions
+  description: PULSE agent tool functions for MIRA Retail
   version: 1.0.0
-  description: |
-    PULSE OPS Agent tool functions for MIRA Retail.
-    All endpoints are called by the Google ADK PULSE agent via Cloud Run.
-    Every endpoint requires IAM Bearer token authentication.
-
-    ## Authentication
-    All endpoints require a valid Google Cloud IAM Bearer token.
-    In development (ENVIRONMENT=development), auth is bypassed.
-
-    ## Human in the loop
-    PULSE never auto-approves purchase orders or discounts.
-    Every draft PO and discount proposal requires explicit manager approval.
-    human_approval_required is always true in all responses.
-
-    ## Rate limits
-    - detect_patterns: 10/minute (BigQuery heavy)
-    - find_root_cause: 20/minute
-    - predict_stockout: 10/minute (BigQuery ML heavy)
-    - calculate_impact: 20/minute
-    - draft_purchase_order: 5/minute (write operation)
-    - execute_perishable_discount: 5/minute (write operation)
-
-  contact:
-    name: Pragmatic Engineers
-    url: https://github.com/pragmaticoder-ai/arc-mira-retail
-
-servers:
-  - url: https://arc-pulse-tools-xxxx-as.a.run.app
-    description: Production (Cloud Run)
-  - url: http://localhost:8002
-    description: Local development
-
-tags:
-  - name: patterns
-    description: Stockout pattern detection from BigQuery bridge
-  - name: analysis
-    description: Root cause analysis and prediction
-  - name: impact
-    description: Business impact calculation
-  - name: orders
-    description: Purchase order drafting
-  - name: perishable
-    description: Perishable discount intelligence
-  - name: health
-    description: Service health
-
-security:
-  - BearerAuth: []
-
 paths:
-
-  /health:
-    get:
-      tags: [health]
-      operationId: health_check
-      summary: Health check
-      security: []
-      responses:
-        "200":
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-
-  # ── PATTERNS ─────────────────────────────────────────────────
-
   /tools/detect-patterns:
     post:
-      tags: [patterns]
-      operationId: detect_patterns
-      summary: Detect stockout patterns from BigQuery incidents
-      description: |
-        Queries BigQuery incidents table for products with 5+ stockout
-        incidents in any 48-hour window, ranked by revenue impact in AED.
-        Always call this first — it is the starting point for all PULSE analysis.
-
-        **Validations:**
-        - store_id must be non-empty string
-        - hours must be between 1 and 168 (1 week max)
-        - min_incidents must be between 1 and 100
-
-        **Sanity checks:**
-        - Returns empty patterns array if no patterns found (not an error)
-        - estimated_revenue_lost_aed must be >= 0
-        - incident_count must equal actual count from BigQuery
-        - evidence.sample_session_ids must be valid UUIDs
-        - Results must be sorted by estimated_revenue_lost_aed descending
-
-        **Rate limit:** 10/minute
-      x-rate-limit: "10/minute"
+      summary: Detect Patterns Endpoint
+      operationId: detect_patterns_endpoint_tools_detect_patterns_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DetectPatternsRequest"
-            examples:
-              standard_48h:
-                value:
-                  store_id: "dubai_marina_01"
-                  hours: 48
-                  min_incidents: 5
+              $ref: '#/components/schemas/DetectPatternsRequest'
+        required: true
       responses:
-        "200":
-          description: Patterns detected
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DetectPatternsResponse"
-              examples:
-                patterns_found:
-                  value:
-                    patterns:
-                      - product_id: "rice_brown_500g"
-                        product_name: "Brown Rice 500g"
-                        store_id: "dubai_marina_01"
-                        incident_count: 23
-                        period_hours: 48
-                        estimated_revenue_lost_aed: 847.00
-                        peak_hour: "10:00-12:00"
-                        abandonment_count: 5
-                        evidence:
-                          first_incident: "2026-10-14T10:32:00Z"
-                          last_incident: "2026-10-16T11:14:00Z"
-                          sample_session_ids:
-                            - "550e8400-e29b-41d4-a716-446655440000"
-                          substitution_acceptance_rate: 0.78
-                no_patterns:
-                  value:
-                    patterns: []
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
-  # ── ANALYSIS ─────────────────────────────────────────────────
-
+                additionalProperties: true
+                type: object
+                title: Response Detect Patterns Endpoint Tools Detect Patterns Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tools/find-root-cause:
     post:
-      tags: [analysis]
-      operationId: find_root_cause
-      summary: Identify root cause of stockout pattern
-      description: |
-        Cross-references a stockout pattern with AlloyDB replenishment schedule
-        to identify the root cause of the supply gap.
-        Returns mandatory evidence block citing exact data sources.
-
-        **Validations:**
-        - product_id must exist in inventory table
-        - store_id must exist in stores table
-        - peak_hour format must be HH:MM-HH:MM
-        - incident_count must be >= 5
-        - period_hours must be between 1 and 168
-
-        **Sanity checks:**
-        - confidence_level must be one of: High, Medium, Low
-        - evidence.data_sources must contain at least 2 entries
-        - evidence.gap_hours must be >= 0
-        - If root_cause is "delivery_timing_mismatch", gap_hours must be > 0
-        - recommended_action must be non-empty string
-
-        **Rate limit:** 20/minute
-      x-rate-limit: "20/minute"
+      summary: Find Root Cause Endpoint
+      operationId: find_root_cause_endpoint_tools_find_root_cause_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FindRootCauseRequest"
-            examples:
-              timing_mismatch:
-                value:
-                  product_id: "rice_brown_500g"
-                  store_id: "dubai_marina_01"
-                  peak_hour: "10:00-12:00"
-                  incident_count: 23
-                  period_hours: 48
+              $ref: '#/components/schemas/RootCauseRequest'
+        required: true
       responses:
-        "200":
-          description: Root cause identified
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FindRootCauseResponse"
-              examples:
-                timing_mismatch:
-                  value:
-                    root_cause: "delivery_timing_mismatch"
-                    confidence_level: "High"
-                    explanation: "Delivery arrives Tuesday 14:00 but demand peaks Mon-Wed 10:00-12:00 — 4-hour supply gap"
-                    evidence:
-                      delivery_day: "Tuesday"
-                      delivery_time: "14:00"
-                      demand_peak_window: "10:00-12:00"
-                      gap_hours: 4
-                      data_sources:
-                        - "BigQuery incidents table: 23 rows, Oct 14-16 2026"
-                        - "AlloyDB replenishment_schedule: store=dubai_marina_01, product=rice_brown_500g"
-                    recommended_action: "Switch to twice-weekly delivery, schedule morning arrival (06:00-08:00)"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
+                additionalProperties: true
+                type: object
+                title: Response Find Root Cause Endpoint Tools Find Root Cause Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tools/predict-stockout:
     post:
-      tags: [analysis]
-      operationId: predict_stockout
-      summary: Forecast next stockout using BigQuery ML
-      description: |
-        Uses BigQuery ML ARIMA_PLUS model to forecast next stockout for a product.
-        Only surfaces predictions with confidence >= 0.70.
-
-        **Validations:**
-        - product_id must exist in inventory
-        - store_id must exist in stores
-        - forecast_days must be between 1 and 30
-
-        **Sanity checks:**
-        - confidence must be between 0.0 and 1.0
-        - Only return predictions with confidence >= 0.70
-        - predicted_stockout_date must be in the future
-        - days_until_stockout must be >= 0
-        - current_stock must be >= 0
-        - daily_consumption_rate must be > 0
-
-        **Rate limit:** 10/minute
-      x-rate-limit: "10/minute"
+      summary: Predict Stockout Endpoint
+      operationId: predict_stockout_endpoint_tools_predict_stockout_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PredictStockoutRequest"
-            examples:
-              standard:
-                value:
-                  product_id: "rice_brown_500g"
-                  store_id: "dubai_marina_01"
-                  forecast_days: 7
+              $ref: '#/components/schemas/PredictStockoutRequest'
+        required: true
       responses:
-        "200":
-          description: Stockout prediction
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PredictStockoutResponse"
-              examples:
-                prediction:
-                  value:
-                    predicted_stockout_date: "2026-10-21"
-                    days_until_stockout: 4
-                    confidence: 0.87
-                    current_stock: 12
-                    daily_consumption_rate: 3.2
-                    evidence:
-                      model: "BigQuery ML ARIMA_PLUS"
-                      training_period: "Oct 1 - Oct 16 2026"
-                      data_points_used: 480
-                low_confidence:
-                  value:
-                    predicted_stockout_date: null
-                    days_until_stockout: null
-                    confidence: 0.52
-                    current_stock: 45
-                    daily_consumption_rate: 2.1
-                    evidence:
-                      model: "BigQuery ML ARIMA_PLUS"
-                      training_period: "Oct 1 - Oct 16 2026"
-                      data_points_used: 240
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
-  # ── IMPACT ───────────────────────────────────────────────────
-
+                additionalProperties: true
+                type: object
+                title: Response Predict Stockout Endpoint Tools Predict Stockout Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tools/calculate-impact:
     post:
-      tags: [impact]
-      operationId: calculate_impact
-      summary: Calculate business impact in AED
-      description: |
-        Calculates business impact in AED for a confirmed stockout pattern.
-        Returns revenue_lost (historical), revenue_at_risk (forecast),
-        and revenue_recoverable (if PO is approved today).
-        Always call before drafting a purchase order.
-
-        **Validations:**
-        - product_id must exist in inventory
-        - store_id must exist in stores
-        - incident_count must be >= 1
-        - average_cart_aed must be > 0
-        - abandonment_count must be >= 0 and <= incident_count
-        - days_to_next_delivery must be >= 0
-
-        **Sanity checks:**
-        - revenue_lost_aed must be >= 0
-        - revenue_at_risk_aed must be >= 0
-        - revenue_recoverable_aed must be <= revenue_at_risk_aed
-        - calculation_basis must explain the formula in plain language
-        - evidence.formula must be present and non-empty
-
-        **Rate limit:** 20/minute
-      x-rate-limit: "20/minute"
+      summary: Calculate Impact Endpoint
+      operationId: calculate_impact_endpoint_tools_calculate_impact_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CalculateImpactRequest"
-            examples:
-              brown_rice:
-                value:
-                  product_id: "rice_brown_500g"
-                  store_id: "dubai_marina_01"
-                  incident_count: 23
-                  average_cart_aed: 220.00
-                  abandonment_count: 5
-                  days_to_next_delivery: 3
+              $ref: '#/components/schemas/CalculateImpactRequest'
+        required: true
       responses:
-        "200":
-          description: Impact calculated
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CalculateImpactResponse"
-              examples:
-                impact:
-                  value:
-                    revenue_lost_aed: 847.00
-                    revenue_at_risk_aed: 2961.00
-                    revenue_recoverable_aed: 3200.00
-                    calculation_basis: "23 incidents × AED 220 avg cart × 0.22 abandonment rate × 0.15 margin = AED 847"
-                    evidence:
-                      incidents_used: 23
-                      average_cart_aed: 220.00
-                      abandonment_rate: 0.22
-                      formula: "incident_count × avg_cart_aed × abandonment_rate × margin_pct"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
-  # ── ORDERS ───────────────────────────────────────────────────
-
+                additionalProperties: true
+                type: object
+                title: Response Calculate Impact Endpoint Tools Calculate Impact Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tools/draft-purchase-order:
     post:
-      tags: [orders]
-      operationId: draft_purchase_order
-      summary: Draft purchase order for manager approval
-      description: |
-        Creates a pending purchase order in AlloyDB purchase_orders table.
-        The PO is in PENDING status until the manager explicitly approves.
-        PULSE never auto-approves. Human approval is always required.
-
-        **Validations:**
-        - product_id must exist in inventory
-        - store_id must exist in stores
-        - quantity must be > 0 and <= 10000
-        - urgency must be one of: low, medium, high, critical
-        - justification must be non-empty, max 1000 chars
-        - revenue_at_risk_aed must be >= 0
-        - evidence_summary must be non-empty
-
-        **Sanity checks:**
-        - status must always be "pending" on creation
-        - human_approval_required must always be true
-        - Duplicate PO for same product+store within 24h returns existing PO
-        - created_by must always be "PULSE"
-
-        **Rate limit:** 5/minute (write operation)
-      x-rate-limit: "5/minute"
+      summary: Draft Purchase Order Endpoint
+      operationId: draft_purchase_order_endpoint_tools_draft_purchase_order_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DraftPurchaseOrderRequest"
-            examples:
-              brown_rice_po:
-                value:
-                  product_id: "rice_brown_500g"
-                  store_id: "dubai_marina_01"
-                  quantity: 120
-                  urgency: "critical"
-                  justification: "23 customer incidents in 48 hours. Delivery timing mismatch identified. Recommend twice-weekly delivery."
-                  revenue_at_risk_aed: 2961.00
-                  revenue_recoverable_aed: 3200.00
-                  evidence_summary: "BigQuery incidents (23 rows, Oct 14-16) + AlloyDB replenishment_schedule mismatch"
+              $ref: '#/components/schemas/DraftPORequest'
+        required: true
       responses:
-        "201":
-          description: Purchase order drafted
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DraftPurchaseOrderResponse"
-              examples:
-                drafted:
-                  value:
-                    po_id: "PO-2026-0042"
-                    product_id: "rice_brown_500g"
-                    product_name: "Brown Rice 500g"
-                    quantity: 120
-                    urgency: "critical"
-                    justification: "23 customer incidents in 48 hours..."
-                    revenue_at_risk_aed: 2961.00
-                    revenue_recoverable_aed: 3200.00
-                    evidence_summary: "BigQuery incidents..."
-                    status: "pending"
-                    human_approval_required: true
-                    created_at: "2026-10-17T09:32:00Z"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: Duplicate PO detected within 24 hours
+                additionalProperties: true
+                type: object
+                title: Response Draft Purchase Order Endpoint Tools Draft Purchase Order Post
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ToolError"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
-  # ── PERISHABLE ───────────────────────────────────────────────
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /tools/execute-perishable-discount:
     post:
-      tags: [perishable]
-      operationId: execute_perishable_discount
-      summary: Detect perishable items and propose discount
-      description: |
-        Checks perishable inventory items (is_perishable=true) where current
-        sell-through velocity will not clear stock before expiry.
-
-        **Trigger condition:**
-        days_to_expiry × daily_sales_rate < current_stock_quantity
-
-        **Discount tiers:**
-        - 3 days to expiry → 15%
-        - 2 days to expiry → 25%
-        - 1 day to expiry  → 40%
-
-        **Validations:**
-        - store_id must exist in stores table
-
-        **Sanity checks:**
-        - Only items with is_perishable=true are checked
-        - Trigger condition must be mathematically verified before proposing
-        - discount_pct must match tier exactly (15, 25, or 40)
-        - discounted_price_aed must equal original_price × (1 - discount_pct/100), rounded to 2dp
-        - revenue_at_risk_aed = units_at_risk × original_price_aed
-        - revenue_recoverable_aed must be <= revenue_at_risk_aed
-        - human_approval_required must always be true
-        - status must always be "pending" on creation
-        - Returns empty perishable_alerts if no items trigger the condition
-
-        **Side effects (after manager approval, NOT this endpoint):**
-        - Sets discount_active=true in AlloyDB inventory
-        - ARIA surfaces discount to customers on next check_stock call
-
-        **Rate limit:** 5/minute
-      x-rate-limit: "5/minute"
+      summary: Execute Perishable Discount Endpoint
+      operationId: execute_perishable_discount_endpoint_tools_execute_perishable_discount_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExecutePerishableDiscountRequest"
-            examples:
-              dubai_marina:
-                value:
-                  store_id: "dubai_marina_01"
+              $ref: '#/components/schemas/PerishableDiscountRequest'
+        required: true
       responses:
-        "200":
-          description: Perishable alerts generated
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExecutePerishableDiscountResponse"
-              examples:
-                alerts_found:
-                  value:
-                    perishable_alerts:
-                      - product_id: "laban_almarai_1l"
-                        product_name: "Almarai Laban 1L"
-                        store_id: "dubai_marina_01"
-                        stock_quantity: 48
-                        expiry_date: "2026-10-19"
-                        days_to_expiry: 2
-                        daily_sales_rate: 8.5
-                        projected_sell_through: 17
-                        units_at_risk: 31
-                        revenue_at_risk_aed: 248.00
-                        discount_pct: 25.0
-                        discounted_price_aed: 6.00
-                        revenue_recoverable_aed: 186.00
-                        evidence:
-                          data_source: "BigQuery incidents — 7-day velocity"
-                          expiry_source: "AlloyDB inventory.expiry_date"
-                          trigger_formula: "2 × 8.5 = 17 < 48 units in stock"
-                        status: "pending"
-                        human_approval_required: true
-                no_alerts:
-                  value:
-                    perishable_alerts: []
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "429":
-          $ref: "#/components/responses/RateLimitExceeded"
-        "500":
-          $ref: "#/components/responses/ToolError"
-
-# ══════════════════════════════════════════════════════════════
-# COMPONENTS
-# ══════════════════════════════════════════════════════════════
-
+                additionalProperties: true
+                type: object
+                title: Response Execute Perishable Discount Endpoint Tools Execute Perishable Discount
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Health Health Get
 components:
-
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: GoogleIAM
-
   schemas:
-
-    # ── REQUEST SCHEMAS ────────────────────────────────────────
-
-    DetectPatternsRequest:
-      type: object
-      required: [store_id]
-      properties:
-        store_id:
-          type: string
-          minLength: 1
-          example: "dubai_marina_01"
-        hours:
-          type: integer
-          minimum: 1
-          maximum: 168
-          default: 48
-          example: 48
-        min_incidents:
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 5
-          example: 5
-
-    FindRootCauseRequest:
-      type: object
-      required: [product_id, store_id, peak_hour, incident_count, period_hours]
-      properties:
-        product_id:
-          type: string
-          minLength: 1
-          example: "rice_brown_500g"
-        store_id:
-          type: string
-          minLength: 1
-          example: "dubai_marina_01"
-        peak_hour:
-          type: string
-          pattern: "^\\d{2}:\\d{2}-\\d{2}:\\d{2}$"
-          example: "10:00-12:00"
-        incident_count:
-          type: integer
-          minimum: 5
-          example: 23
-        period_hours:
-          type: integer
-          minimum: 1
-          maximum: 168
-          example: 48
-
-    PredictStockoutRequest:
-      type: object
-      required: [product_id, store_id]
-      properties:
-        product_id:
-          type: string
-          minLength: 1
-          example: "rice_brown_500g"
-        store_id:
-          type: string
-          minLength: 1
-          example: "dubai_marina_01"
-        forecast_days:
-          type: integer
-          minimum: 1
-          maximum: 30
-          default: 7
-          example: 7
-
     CalculateImpactRequest:
-      type: object
-      required: [product_id, store_id, incident_count, average_cart_aed, abandonment_count, days_to_next_delivery]
       properties:
         product_id:
           type: string
-          minLength: 1
+          title: Product Id
         store_id:
           type: string
-          minLength: 1
+          title: Store Id
         incident_count:
           type: integer
-          minimum: 1
-          example: 23
+          title: Incident Count
         average_cart_aed:
           type: number
-          format: float
-          minimum: 0.01
-          example: 220.00
+          title: Average Cart Aed
         abandonment_count:
           type: integer
-          minimum: 0
-          example: 5
+          title: Abandonment Count
         days_to_next_delivery:
           type: integer
-          minimum: 0
-          example: 3
-
-    DraftPurchaseOrderRequest:
+          title: Days To Next Delivery
       type: object
-      required: [product_id, store_id, quantity, urgency, justification, revenue_at_risk_aed, revenue_recoverable_aed, evidence_summary]
+      required:
+      - product_id
+      - store_id
+      - incident_count
+      - average_cart_aed
+      - abandonment_count
+      - days_to_next_delivery
+      title: CalculateImpactRequest
+    DetectPatternsRequest:
+      properties:
+        store_id:
+          type: string
+          title: Store Id
+        hours:
+          type: integer
+          title: Hours
+          default: 48
+        min_incidents:
+          type: integer
+          title: Min Incidents
+          default: 5
+      type: object
+      required:
+      - store_id
+      title: DetectPatternsRequest
+    DraftPORequest:
       properties:
         product_id:
           type: string
-          minLength: 1
+          title: Product Id
         store_id:
           type: string
-          minLength: 1
+          title: Store Id
         quantity:
           type: integer
-          minimum: 1
-          maximum: 10000
-          example: 120
+          title: Quantity
         urgency:
-          $ref: "#/components/schemas/Urgency"
+          type: string
+          title: Urgency
         justification:
           type: string
-          minLength: 1
-          maxLength: 1000
+          title: Justification
         revenue_at_risk_aed:
           type: number
-          format: float
-          minimum: 0.0
+          title: Revenue At Risk Aed
         revenue_recoverable_aed:
           type: number
-          format: float
-          minimum: 0.0
+          title: Revenue Recoverable Aed
         evidence_summary:
           type: string
-          minLength: 1
-          maxLength: 500
-
-    ExecutePerishableDiscountRequest:
+          title: Evidence Summary
       type: object
-      required: [store_id]
+      required:
+      - product_id
+      - store_id
+      - quantity
+      - urgency
+      - justification
+      - revenue_at_risk_aed
+      - revenue_recoverable_aed
+      - evidence_summary
+      title: DraftPORequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    PerishableDiscountRequest:
       properties:
         store_id:
           type: string
-          minLength: 1
-          example: "dubai_marina_01"
-
-    # ── RESPONSE SCHEMAS ───────────────────────────────────────
-
-    DetectPatternsResponse:
+          title: Store Id
       type: object
-      required: [patterns]
-      properties:
-        patterns:
-          type: array
-          items:
-            $ref: "#/components/schemas/StockoutPattern"
-
-    FindRootCauseResponse:
-      type: object
-      required: [root_cause, confidence_level, explanation, evidence, recommended_action]
-      properties:
-        root_cause:
-          type: string
-          enum:
-            - delivery_timing_mismatch
-            - insufficient_order_quantity
-            - supplier_delay
-            - demand_spike
-            - unknown
-        confidence_level:
-          $ref: "#/components/schemas/ConfidenceLevel"
-        explanation:
-          type: string
-        evidence:
-          $ref: "#/components/schemas/RootCauseEvidence"
-        recommended_action:
-          type: string
-
-    PredictStockoutResponse:
-      type: object
-      required: [confidence, current_stock, daily_consumption_rate, evidence]
-      properties:
-        predicted_stockout_date:
-          type: string
-          format: date
-          nullable: true
-        days_until_stockout:
-          type: integer
-          nullable: true
-          minimum: 0
-        confidence:
-          type: number
-          format: float
-          minimum: 0.0
-          maximum: 1.0
-        current_stock:
-          type: integer
-          minimum: 0
-        daily_consumption_rate:
-          type: number
-          format: float
-          minimum: 0.0
-        evidence:
-          $ref: "#/components/schemas/PredictionEvidence"
-
-    CalculateImpactResponse:
-      type: object
-      required: [revenue_lost_aed, revenue_at_risk_aed, revenue_recoverable_aed, calculation_basis, evidence]
-      properties:
-        revenue_lost_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        revenue_at_risk_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        revenue_recoverable_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        calculation_basis:
-          type: string
-        evidence:
-          $ref: "#/components/schemas/ImpactEvidence"
-
-    DraftPurchaseOrderResponse:
-      type: object
-      required: [po_id, product_id, product_name, quantity, urgency, justification, revenue_at_risk_aed, revenue_recoverable_aed, evidence_summary, status, human_approval_required, created_at]
-      properties:
-        po_id:
-          type: string
-          example: "PO-2026-0042"
-        product_id:
-          type: string
-        product_name:
-          type: string
-        quantity:
-          type: integer
-        urgency:
-          $ref: "#/components/schemas/Urgency"
-        justification:
-          type: string
-        revenue_at_risk_aed:
-          type: number
-          format: float
-        revenue_recoverable_aed:
-          type: number
-          format: float
-        evidence_summary:
-          type: string
-        status:
-          type: string
-          enum: [pending]
-        human_approval_required:
-          type: boolean
-          enum: [true]
-        created_at:
-          type: string
-          format: date-time
-
-    ExecutePerishableDiscountResponse:
-      type: object
-      required: [perishable_alerts]
-      properties:
-        perishable_alerts:
-          type: array
-          items:
-            $ref: "#/components/schemas/PerishableAlert"
-
-    HealthResponse:
-      type: object
-      required: [status, service]
-      properties:
-        status:
-          type: string
-          enum: [healthy, degraded, unhealthy]
-        service:
-          type: string
-          example: "arc-pulse-tools"
-
-    ToolError:
-      type: object
-      required: [error, error_code, error_message, retry_suggested]
-      properties:
-        error:
-          type: boolean
-          example: true
-        error_code:
-          type: string
-          enum:
-            - DB_CONNECTION_ERROR
-            - NOT_FOUND
-            - VALIDATION_ERROR
-            - RATE_LIMIT_EXCEEDED
-            - AUTH_ERROR
-            - TIMEOUT
-            - INTERNAL_ERROR
-            - BIGQUERY_ERROR
-            - BIGQUERY_ML_ERROR
-            - DUPLICATE_PO
-        error_message:
-          type: string
-        retry_suggested:
-          type: boolean
-
-    # ── SHARED SCHEMAS ─────────────────────────────────────────
-
-    Urgency:
-      type: string
-      enum: [low, medium, high, critical]
-      example: "critical"
-
-    ConfidenceLevel:
-      type: string
-      enum: [High, Medium, Low]
-      example: "High"
-
-    StockoutPattern:
-      type: object
-      required: [product_id, product_name, store_id, incident_count, period_hours, estimated_revenue_lost_aed, peak_hour, abandonment_count, evidence]
+      required:
+      - store_id
+      title: PerishableDiscountRequest
+    PredictStockoutRequest:
       properties:
         product_id:
           type: string
-        product_name:
-          type: string
+          title: Product Id
         store_id:
           type: string
-        incident_count:
+          title: Store Id
+        forecast_days:
           type: integer
-          minimum: 1
-        period_hours:
-          type: integer
-        estimated_revenue_lost_aed:
-          type: number
-          format: float
-          minimum: 0.0
+          title: Forecast Days
+          default: 7
+      type: object
+      required:
+      - product_id
+      - store_id
+      title: PredictStockoutRequest
+    RootCauseRequest:
+      properties:
+        product_id:
+          type: string
+          title: Product Id
+        store_id:
+          type: string
+          title: Store Id
         peak_hour:
           type: string
-          example: "10:00-12:00"
-        abandonment_count:
+          title: Peak Hour
+        incident_count:
           type: integer
-          minimum: 0
-        evidence:
-          $ref: "#/components/schemas/PatternEvidence"
-
-    PatternEvidence:
+          title: Incident Count
+        period_hours:
+          type: integer
+          title: Period Hours
       type: object
-      required: [first_incident, last_incident, sample_session_ids, substitution_acceptance_rate]
-      properties:
-        first_incident:
-          type: string
-          format: date-time
-        last_incident:
-          type: string
-          format: date-time
-        sample_session_ids:
-          type: array
-          maxItems: 3
-          items:
-            type: string
-            format: uuid
-        substitution_acceptance_rate:
-          type: number
-          format: float
-          minimum: 0.0
-          maximum: 1.0
-
-    RootCauseEvidence:
-      type: object
-      required: [delivery_day, delivery_time, demand_peak_window, gap_hours, data_sources]
-      properties:
-        delivery_day:
-          type: string
-          example: "Tuesday"
-        delivery_time:
-          type: string
-          example: "14:00"
-        demand_peak_window:
-          type: string
-          example: "10:00-12:00"
-        gap_hours:
-          type: integer
-          minimum: 0
-        data_sources:
-          type: array
-          minItems: 2
-          items:
-            type: string
-
-    PredictionEvidence:
-      type: object
-      required: [model, training_period, data_points_used]
-      properties:
-        model:
-          type: string
-          example: "BigQuery ML ARIMA_PLUS"
-        training_period:
-          type: string
-          example: "Oct 1 - Oct 16 2026"
-        data_points_used:
-          type: integer
-          minimum: 1
-
-    ImpactEvidence:
-      type: object
-      required: [incidents_used, average_cart_aed, abandonment_rate, formula]
-      properties:
-        incidents_used:
-          type: integer
-        average_cart_aed:
-          type: number
-          format: float
-        abandonment_rate:
-          type: number
-          format: float
-          minimum: 0.0
-          maximum: 1.0
-        formula:
-          type: string
-
-    PerishableAlert:
-      type: object
-      required: [product_id, product_name, store_id, stock_quantity, expiry_date, days_to_expiry, daily_sales_rate, projected_sell_through, units_at_risk, revenue_at_risk_aed, discount_pct, discounted_price_aed, revenue_recoverable_aed, evidence, status, human_approval_required]
-      properties:
-        product_id:
-          type: string
-        product_name:
-          type: string
-        store_id:
-          type: string
-        stock_quantity:
-          type: integer
-          minimum: 0
-        expiry_date:
-          type: string
-          format: date
-        days_to_expiry:
-          type: integer
-          minimum: 1
-          maximum: 3
-        daily_sales_rate:
-          type: number
-          format: float
-          minimum: 0.0
-        projected_sell_through:
-          type: integer
-          minimum: 0
-        units_at_risk:
-          type: integer
-          minimum: 0
-        revenue_at_risk_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        discount_pct:
-          type: number
-          format: float
-          enum: [15.0, 25.0, 40.0]
-        discounted_price_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        revenue_recoverable_aed:
-          type: number
-          format: float
-          minimum: 0.0
-        evidence:
-          $ref: "#/components/schemas/PerishableEvidence"
-        status:
-          type: string
-          enum: [pending]
-        human_approval_required:
-          type: boolean
-          enum: [true]
-
-    PerishableEvidence:
-      type: object
-      required: [data_source, expiry_source, trigger_formula]
-      properties:
-        data_source:
-          type: string
-          example: "BigQuery incidents — 7-day velocity"
-        expiry_source:
-          type: string
-          example: "AlloyDB inventory.expiry_date"
-        trigger_formula:
-          type: string
-          example: "2 × 8.5 = 17 < 48 units in stock"
-
-  responses:
-
+      required:
+      - product_id
+      - store_id
+      - peak_hour
+      - incident_count
+      - period_hours
+      title: RootCauseRequest
     ValidationError:
-      description: Request validation failed
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ToolError"
-
-    Unauthorized:
-      description: Missing or invalid IAM token
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ToolError"
-
-    NotFound:
-      description: Requested resource not found
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ToolError"
-
-    RateLimitExceeded:
-      description: Rate limit exceeded
-      headers:
-        Retry-After:
-          schema:
-            type: integer
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ToolError"
-
-    ToolError:
-      description: Internal tool error
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ToolError"
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

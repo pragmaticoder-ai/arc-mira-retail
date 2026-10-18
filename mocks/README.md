@@ -1,38 +1,30 @@
-# ARC mock server — fake Google Cloud APIs
+# Optional ARC API simulator
 
-A standalone FastAPI app that simulates the Google endpoints the ARC backend
-depends on, so tools can run and demo with nothing on GCP. Optional: the
-adapters in `tools/shared/` work fully in-process by default. Use this when you
-want a realistic "calling an external API" path.
+This FastAPI server exposes synthetic generation, embedding and BigQuery-shaped
+endpoints for adapter experiments. It is not Google Cloud, a full emulator, or
+the shared-storage implementation used by the current local demo.
 
-## Run
-
-```bash
-cd mocks
-pip install -r requirements.txt
-uvicorn mock_server:app --port 8900
-# health check: http://localhost:8900/health
-```
-
-Then tell the backend to route through it:
+From the repository root, in a separate terminal:
 
 ```bash
-export MOCK_SERVER_URL=http://localhost:8900
+uv pip install -r mocks/requirements.txt
+.venv/bin/python -m uvicorn mocks.mock_server:app --host 127.0.0.1 --port 8900
 ```
 
-## Endpoints
+Set `MOCK_SERVER_URL=http://127.0.0.1:8900` before importing the Python adapters
+to exercise HTTP generation/embedding methods. The intent/category heuristics do
+not automatically become remote model calls. Real Google integration remains deferred.
 
-| Method | Path | Simulates |
-|--------|------|-----------|
-| POST | `/v1/gemini/generate` | Vertex AI Gemini text generation |
-| POST | `/v1/embeddings` | Vertex AI text embeddings |
-| POST | `/v1/bigquery/insert` | BigQuery streaming insert (log_session) |
-| POST | `/v1/bigquery/query` | BigQuery query (incidents bridge reads) |
-| GET | `/health` | liveness |
+| Endpoint | Synthetic purpose | Current adapter routing |
+|---|---|---|
+| POST /v1/gemini/generate | Canned completion | MockLLM.generate when called with MOCK_SERVER_URL set |
+| POST /v1/embeddings | Deterministic product vectors | MockEmbeddings.embed with MOCK_SERVER_URL set |
+| POST /v1/bigquery/insert | Simulated insert | Not used by current incident adapters |
+| POST /v1/bigquery/query | Simulated query | Not used by current incident adapters |
+| GET /health | Liveness | Optional manual check |
 
-## Caveats
-
-This is a mock: no auth, no persistence across restarts, and only the slice of
-the Google API surface the ARC adapters actually call. Embedding vectors use the
-same deterministic scheme as the in-process mock, so similarity ordering is
-identical either way.
+The current incident bridge is selected by `ARC_BRIDGE_DB` (SQLite or process
+memory), not by MOCK_SERVER_URL. Operational persistence uses ARC_STATE_DB. Use
+[scripts/run_local.py](../scripts/run_local.py) for the reproducible complete loop.
+The simulator is unauthenticated, synthetic and process-local; it is not a
+production endpoint or evidence of live model/BigQuery execution.

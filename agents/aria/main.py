@@ -139,6 +139,14 @@ def _live_shopping(state: dict, req: ChatRequest) -> dict:
         products = {p["product_id"]: p for p in catalog}
         if any(i.product_id not in products for i in plan.items) or any(pid not in products for pid in plan.requested_ids):
             raise HTTPException(502, "Planner returned a product outside this store catalog")
+        if re.search(r"\bbrown\s+rice\b",req.message,re.I):
+            matching=[p for p in catalog if p["category"]=="grains" and re.search(r"\bbrown\s+(?:basmati\s+)?rice\b",p["product_name"],re.I)
+                and matches_diet(p,plan.dietary) and p["product_id"] not in plan.excluded_ids and p["category"] not in plan.excluded_categories]
+            if matching and not any(p["stock_quantity"]>0 for p in matching):
+                original=min(matching,key=lambda p:p["product_id"])
+                plan.requested_ids=list(dict.fromkeys([*plan.requested_ids,original["product_id"]]))
+                # Do not silently replace a requested grain with a different rice.
+                plan.items=[item for item in plan.items if not re.search(r"\brice\b",products[item.product_id]["product_name"],re.I)]
         draft = copy.deepcopy(state)
         draft.update(dietary=plan.dietary,budget=plan.budget,household=plan.household,
             excluded_ids=plan.excluded_ids,excluded_categories=plan.excluded_categories)
@@ -194,10 +202,17 @@ def _live_shopping(state: dict, req: ChatRequest) -> dict:
                 (f"Alternative: {sub['name']}. Please rate whether it meets your needs." if sub.get("substitute_product_id") else "No suitable alternative was found."))
     _quote(state, [i.model_dump() for i in plan.items])
     state["session_logged"] = _log(state, False)
-    db.save_session(state["session_id"], state)
-    return _response(state, plan.reply + " " + " ".join(notes) +
-        f" Basket total: AED {state['cart']['total_aed']:.2f}. Review before confirming.",
+    weekly = bool(re.search(r"\b(weekly|groceries)\b",req.message,re.I))
+    summary = (f"Here is a proposed weekly starter basket for {state['household']} people, within your AED {state['budget']:.2f} budget. "
+        if weekly else "Your proposed basket is ready. ")
+    # Only server-validated basket facts belong in a cart update reply. The
+    # model's free text can otherwise contradict prices or claim missing items.
+    reply = summary + " ".join(notes) + f" Basket total: AED {state['cart']['total_aed']:.2f}. Review before confirming."
+    state["conversation"][-1] = {"role":"assistant","text":reply}
+    db.save_session(state["session_id"],state)
+    return _response(state, reply,
         [{"type": "ACTION", "text": "Gemini planned against the PostgreSQL catalog; the server validated stock, diet, exclusions, budget and current prices."}])
+
 
 
 def _orchestrate(req: ChatRequest) -> dict:

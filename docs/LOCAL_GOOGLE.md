@@ -121,3 +121,7 @@ new quote. Informational turns do not emit demand or checkout events.
 
 See [CATALOG.md](CATALOG.md) for product imports, pagination, attributes,
 and product details. Imports enrich the existing Dubai Marina MIRA store.
+
+## Hosted applications
+
+See [CLOUD_RUN.md](CLOUD_RUN.md) for deployment, access, URLs and end-to-end testing.

@@ -17,3 +17,13 @@ node_modules
 .next
 data/local
 /tmp
+
+.env
+.env.*
+!.env.example
+*.env.local
+.next*
+.tsconfig-local-*
+.terraform
+*.tfstate*
+*.tfvars

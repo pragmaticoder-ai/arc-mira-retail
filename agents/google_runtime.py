@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import uuid
 from typing import Literal
 
@@ -31,6 +32,11 @@ class ShoppingPlan(BaseModel):
     requested_ids: list[str] = Field(default_factory=list)
     excluded_ids: list[str] = Field(default_factory=list)
     excluded_categories: list[str] = Field(default_factory=list)
+
+
+class WeeklyShoppingPlan(ShoppingPlan):
+    action: Literal["update_cart"] = "update_cart"
+    items: list[BasketItem] = Field(min_length=1, max_length=100)
 
 
 async def invoke(name: str, instruction: str, payload: dict, schema=None) -> str:
@@ -116,6 +122,11 @@ def plan_shopping(message: str, state: dict, inventory: list[dict]) -> ShoppingP
     the household and using actual pack sizes. Include an in-stock brown rice when
     available; do not select an unavailable SKU when another brown rice is stocked.
     Do not substitute white rice for requested brown rice without consent.
+    For an explicit weekly shopping request, a missing requested product must NOT
+    block the rest of the basket: build the other stocked groceries, record the
+    missing original ID in requested_ids, and leave the alternative out pending
+    consent. required_action=update_cart means return that action and a nonempty
+    starter basket; do not ask a clarification instead of building other items.
     Keep the sum of unit prices times quantities within budget BEFORE promotions.
     Briefly explain the basket, household, budget, and any missing requested item.
     Do not claim a complete nutrition or meal plan. If a previous proposal failed
@@ -148,7 +159,21 @@ def plan_shopping(message: str, state: dict, inventory: list[dict]) -> ShoppingP
         }
         for p in inventory
     ]
+    weekly_request = bool(
+        re.search(
+            r"^(?:please\s+)?(?:build\s+(?:me\s+)?(?:a\s+)?|prepare\s+(?:a\s+)?|i\s+need\s+)?weekly\b",
+            message.strip(),
+            re.I,
+        )
+        and re.search(r"\b(groceries|grocery|basket|shopping)\b", message, re.I)
+    )
+    schema = (
+        WeeklyShoppingPlan
+        if weekly_request and any(p["stock_quantity"] > 0 for p in inventory)
+        else ShoppingPlan
+    )
     payload = {
+        "required_action": "update_cart" if schema is WeeklyShoppingPlan else None,
         "message": message,
         "conversation": state.get("conversation", []),
         "current": {
@@ -165,8 +190,8 @@ def plan_shopping(message: str, state: dict, inventory: list[dict]) -> ShoppingP
         "catalog": inventory,
         "validation_feedback": state.get("planner_validation_feedback"),
     }
-    return ShoppingPlan.model_validate_json(
-        asyncio.run(invoke("aria_planner", prompt, payload, ShoppingPlan))
+    return schema.model_validate_json(
+        asyncio.run(invoke("aria_planner", prompt, payload, schema))
     )
 
 

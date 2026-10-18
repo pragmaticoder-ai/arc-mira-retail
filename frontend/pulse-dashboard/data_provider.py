@@ -80,7 +80,14 @@ def reject_po(po_id: str) -> dict:
 def google_summary(store_id: str, hours: int) -> str:
     import httpx
 
-    response = httpx.post(os.getenv("PULSE_AGENT_URL", "http://127.0.0.1:8002") + "/pulse/analyze",
+    url=os.getenv("PULSE_AGENT_URL", "http://127.0.0.1:8002")
+    headers={}
+    if os.getenv("K_SERVICE"):
+        from google.auth.transport.requests import Request
+        from google.oauth2.id_token import fetch_id_token
+
+        headers["Authorization"]="Bearer "+fetch_id_token(Request(),url)
+    response = httpx.post(url + "/pulse/analyze",headers=headers,
                           json={"store_id": store_id, "hours": hours}, timeout=120)
     response.raise_for_status()
     return response.json()["summary"]

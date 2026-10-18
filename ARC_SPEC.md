@@ -47,7 +47,7 @@ a hypothesis to evaluate; revenue recovery has not been measured.
 | Incident analytics | SQLite upserts and Python aggregation | BigQuery with a delivery/idempotency strategy |
 | Stockout forecast | Synthetic depletion scenario and illustrative confidence fixture | Evaluated forecasting model |
 | Inventory transfer | Manager-approved local stock simulation | Logistics/ERP integration and delivery acknowledgement |
-| Replenishment | Persistent PO draft and manager decision | Supplier submission and delivery reconciliation |
+| Replenishment | Persistent PO, manager approval and clearly labeled one-time demo receipt into shared stock | Real supplier submission and physical delivery reconciliation |
 | Deployment | One-host local launcher | Cloud Run/Firebase and shared managed storage |
 
 A successful local order is not a payment transaction. `/login` is a demo entry

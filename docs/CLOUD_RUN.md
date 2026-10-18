@@ -1,5 +1,7 @@
 # Hosted ARIA and PULSE
 
+Demo usernames, shared passwords and sign-in instructions: [README — Try the hosted demo](../README.md#try-the-hosted-demo).
+
 The Cloud Run deployment reuses project `aria-mira-retail`, region
 `asia-southeast1`, Cloud SQL instance `arc-postgres-instance`, database `arc`,
 and BigQuery dataset `arc_dataset`. It does not recreate the database, import
@@ -18,7 +20,7 @@ the existing resources.
 
 | Cloud Run service | Purpose | Access |
 |---|---|---|
-| arc-storefront | ARIA shopping application | HTTPS, browser demo username/password |
+| arc-storefront | ARIA shopping application | HTTPS, customer sign-in form |
 | arc-pulse-dashboard | PULSE manager dashboard | HTTPS, manager sign-in form |
 | arc-aria-agent | Shopping/checkout API | Private; storefront service identity |
 | arc-pulse-agent | Operations/Gemini API | Private; dashboard service identity |
@@ -43,6 +45,8 @@ Build independently, then deploy a successfully published tag:
 Use a new tag after source changes. Deployment code changes must be committed
 alongside application changes to make a particular release reproducible.
 
+Create missing fictional shopper profiles with `.venv/bin/python scripts/create_demo_customers.py` against the configured Google database. Existing profiles are preserved.
+
 ## URLs and access
 
 - ARIA: https://arc-storefront-kif65kxodq-as.a.run.app
@@ -53,7 +57,7 @@ The completed deployment writes URLs to `data/local/cloud/deployment.json`
 and demo credentials to `data/local/cloud/ACCESS.md`. Both are gitignored;
 passwords also live in Secret Manager. The access file has owner-only permissions.
 
-ARIA uses a browser username/password prompt. PULSE uses its manager form.
+ARIA uses `/login` with a customer picker and password form. PULSE uses its manager form. Five fictional shoppers share the ARIA demo password; each has separate sessions, basket and order history. The avatar menu provides Switch customer and Sign out.
 The accounts protect a shared fictional demo, not production customer accounts
 or enterprise SSO. Do not use your Google account or database password there.
 

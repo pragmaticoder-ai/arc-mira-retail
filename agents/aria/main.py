@@ -377,7 +377,7 @@ def inventory(store_id: str = "dubai_marina_01") -> dict:
 def catalog(store_id: str = "dubai_marina_01", category: str = "all", q: str = Query(default="", max_length=200),
             page: int = Query(default=1, ge=1), page_size: int = Query(default=24, ge=1, le=96),
             sort: str = "name", min_price: float | None = Query(default=None, ge=0),
-            max_price: float | None = Query(default=None, ge=0), in_stock: bool = False,
+            max_price: float | None = Query(default=None, ge=0), in_stock: bool = False, offers_only: bool = False,
             attributes: str = Query(default="{}", max_length=8000)) -> dict:
     from tools.catalog.service import list_products
 
@@ -388,7 +388,7 @@ def catalog(store_id: str = "dubai_marina_01", category: str = "all", q: str = Q
         if min_price is not None and max_price is not None and min_price > max_price:
             raise ValueError("Minimum price exceeds maximum price")
         return list_products(store_id=store_id, category=category, q=q, page=page, page_size=page_size,
-            sort=sort, min_price=min_price, max_price=max_price, in_stock=in_stock, attributes=selected)
+            sort=sort, min_price=min_price, max_price=max_price, in_stock=in_stock, attributes=selected, offers_only=offers_only)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

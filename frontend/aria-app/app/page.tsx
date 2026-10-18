@@ -23,6 +23,7 @@ export default function StorePage() {
   const [search, setSearch] = useState('')
   const [attributes, setAttributes] = useState<Record<string, string[]>>({})
   const [facets, setFacets] = useState<CatalogFacets>({})
+  const [offersOnly,setOffersOnly]=useState(false)
   const [inStock, setInStock] = useState(false)
   const [halalOnly, setHalalOnly] = useState(false)
   const [maxBudget, setMaxBudget] = useState(0)
@@ -50,7 +51,7 @@ export default function StorePage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <NavBar search={search} onSearch={setSearch} stores={stores} storeId={storeId} onStoreChange={(id) => { reset(); setStoreId(id) }} />
+      <NavBar offersOnly={offersOnly} onOffers={value=>{setOffersOnly(value);setCategory('all');setSearch('');setAttributes({});setMaxBudget(0)}} search={search} onSearch={setSearch} stores={stores} storeId={storeId} onStoreChange={(id) => { reset(); setStoreId(id) }} />
       <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         <CategorySidebar
           facets={facets}
@@ -66,6 +67,7 @@ export default function StorePage() {
           onBudgetChange={setMaxBudget}
         />
         <ProductGrid
+          offersOnly={offersOnly}
           search={search}
           attributes={attributes}
           inStock={inStock}

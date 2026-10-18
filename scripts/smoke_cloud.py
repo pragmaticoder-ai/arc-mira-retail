@@ -35,7 +35,21 @@ def main():
             r = client.get(deployed[name] + "/health")
             assert r.status_code in (401, 403), (name, r.status_code)
         assert client.get(aria + "/api/aria/catalog").status_code == 401
-        client.auth = ("mira-demo", passwords[0])
+        landing=client.get(aria + "/")
+        assert landing.status_code == 307 and "www-authenticate" not in landing.headers
+        assert client.post(aria + "/api/auth/login", json={"username":"mira-demo","password":"incorrect"}).status_code == 401
+        login=client.post(aria + "/api/auth/login", json={"username":"mira-demo","password":passwords[0]})
+        login.raise_for_status()
+        assert "HttpOnly" in login.headers["set-cookie"] and "Secure" in login.headers["set-cookie"]
+        assert client.get(aria + "/api/auth/session").json()["customer"]["customer_id"] == "sarah_123"
+        with httpx.Client(timeout=60) as second:
+            second.post(aria + "/api/auth/login",json={"username":"ahmed-demo","password":passwords[0]}).raise_for_status()
+            identity=second.get(aria + "/api/aria/bootstrap?customer_id=sarah_123").json()["customer"]["customer_id"]
+            assert identity == "demo_ahmed"
+            assert second.get(aria + "/api/aria/orders?customer_id=sarah_123").json() == second.get(aria + "/api/aria/orders").json()
+            second.post(aria + "/api/auth/logout").raise_for_status()
+            assert second.get(aria + "/api/aria/orders").status_code == 401
+        report["form_login_and_customer_isolation"]="passed"
         for route in ("/", "/cart", "/orders"):
             r = client.get(aria + route)
             r.raise_for_status()

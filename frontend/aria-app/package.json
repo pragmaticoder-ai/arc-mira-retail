@@ -2,12 +2,13 @@
   "name": "arc-aria-app",
   "version": "1.0.0",
   "private": true,
-  "description": "ARIA — MIRA Retail customer grocery assistant (ARC)",
+  "description": "ARIA \u2014 MIRA Retail customer grocery assistant (ARC)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --test tests/auth.test.mjs && node --loader ./tests/tsx-loader.mjs --test tests/ui.test.mjs"
   },
   "dependencies": {
     "next": "^14.2.35",
@@ -19,6 +20,7 @@
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.19",
+    "jsdom": "^26.1.0",
     "postcss": "8.4.39",
     "tailwindcss": "3.4.6",
     "typescript": "5.5.3"

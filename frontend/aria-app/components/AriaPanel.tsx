@@ -191,7 +191,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
         </div>)}
         {signals.filter((s) => s.outcome !== 'fulfilled').map((s) => <p key={s.product_id} className="mt-1 text-xs text-mira-700">Recorded: {s.outcome === 'unknown' ? 'awaiting your feedback' : s.outcome} · {s.product_name}</p>)}
       </div>}
-      <CartPreview onConfirm={() => send('confirm')} busy={busy} confirming={confirming} />
+      <CartPreview onConfirm={() => send(quoteId ? 'confirm' : 'review cart')} busy={busy} confirming={confirming} />
 
       {/* Input row */}
       <form

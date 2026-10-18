@@ -1,3 +1,4 @@
+import { requestCustomer } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { getAriaConfig } from '@/lib/config'
 import { getAriaHeaders } from '@/lib/upstreamAuth'
@@ -5,6 +6,8 @@ import { getAriaHeaders } from '@/lib/upstreamAuth'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const customer=await requestCustomer(request)
+  if(!customer)return NextResponse.json({error_message:"Please sign in."},{status:401})
   const cfg = getAriaConfig()
   let body: Record<string, unknown>
   try {
@@ -21,7 +24,7 @@ export async function POST(request: Request) {
     const upstream = await fetch(`${cfg.ariaAgentUrl}/aria/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await getAriaHeaders()) },
-      body: JSON.stringify({ ...body, customer_id: body.customer_id ?? cfg.defaultCustomerId, store_id: body.store_id ?? cfg.defaultStoreId }),
+      body: JSON.stringify({ ...body, customer_id: customer.customer_id, store_id: body.store_id ?? cfg.defaultStoreId }),
       signal: AbortSignal.timeout(cfg.requestTimeoutMs),
       cache: 'no-store',
     })

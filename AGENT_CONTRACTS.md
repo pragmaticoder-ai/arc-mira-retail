@@ -170,8 +170,7 @@ threshold. Proposal key: `demand:{store}:{product}:{business_date}`.
 
 A decision includes baseline counts, evidence-session IDs, selected action,
 quantity, status=approved, execution label and decision timestamp. Transfer execution
-is local_inventory_simulation; replenishment is purchase_order_drafted; defer is
-observation_only. A replenishment decision does not approve its separate PO.
+is local_inventory_simulation; replenishment is demo_inventory_receipt; defer is observation_only. In this hackathon demo, replenishment approval approves its PO and simulates receipt into shared inventory. Explicit PO approval uses the labeled Approve & restock (demo) control. Receipt is atomic and idempotent via inventory_received_at, and no supplier is contacted. Rejections leave stock unchanged.
 
 Outcome monitoring includes baseline, after counts, after_sessions, collecting /
 awaiting_action status and a non-causal interpretation note. Sessions first seen

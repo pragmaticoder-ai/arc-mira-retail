@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta
 
 from tools.pulse_tools.calculate_impact import calculate_impact
 from tools.pulse_tools.demand_intelligence import decide_demand as decide_demand
@@ -15,6 +16,7 @@ from tools.pulse_tools.execute_perishable_discount import execute_perishable_dis
 from tools.pulse_tools.find_root_cause import find_root_cause
 from tools.shared.alloydb_client import get_alloydb
 from tools.shared.settings import settings
+from tools.shared.clock import now
 
 STORE_ID = os.getenv("PULSE_STORE_ID", "dubai_marina_01")
 
@@ -75,6 +77,84 @@ def approve_po(po_id: str) -> dict:
 
 def reject_po(po_id: str) -> dict:
     return get_alloydb().decide_purchase_order(po_id, "rejected")
+
+
+def action_history(store_id: str) -> list[dict]:
+    """Persistent audit history, independent of whether an alert is still active."""
+    db = get_alloydb()
+    rows = []
+    with db.transaction():
+        decisions = db.list_decisions(store_id)
+        linked = {d.get("po_id") for d in decisions}
+        for d in decisions + [p for p in db.list_purchase_orders(store_id)
+                              if p["status"] != "pending" and p["po_id"] not in linked]:
+            product = db.get_product_at_store(d["product_id"], store_id) or {}
+            action = d.get("action", "replenish")
+            status = d["status"]
+            if status == "rejected":
+                result, state = "No inventory or price change", "Rejected"
+            elif action == "discount":
+                result, state = f"{d['discount_pct']:g}% discount applied", "Completed"
+            elif action == "transfer":
+                result, state = f"Transferred {d['quantity']} units from {d['source_store_id']}", "Completed"
+            elif d.get("execution") == "demo_inventory_receipt":
+                result, state = f"Received {d['quantity']} units (demo delivery)", "Completed"
+            elif action == "defer":
+                result, state = "Collecting more customer evidence", "Monitoring"
+            else:
+                result, state = "Approved; awaiting receipt", "Approved"
+            rows.append({"Product": product.get("product_name", d["product_id"]),
+                "Action": action.capitalize(), "Status": state, "Result": result,
+                "Time": d.get("decided_at", ""),
+                "Reference": d.get("proposal_key") or d.get("po_id") or d["product_id"]})
+    return sorted(rows, key=lambda r: r["Time"], reverse=True)
+
+
+def customer_activity(store_id: str, hours: int) -> list[dict]:
+    db = get_alloydb()
+    rows = []
+    cutoff = now() - timedelta(hours=hours)
+    with db.transaction():
+        for session in db.list_sessions(store_id):
+            stamp = session.get("updated_at")
+            if stamp:
+                parsed = datetime.fromisoformat(stamp)
+                parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=now().tzinfo)
+                if parsed < cutoff:
+                    continue
+            customer = db.get_customer(session["customer_id"]) or {}
+            cart = session.get("cart") or {}
+            rows.append({"Customer": customer.get("name", session["customer_id"]),
+                "Customer ID": session["customer_id"], "Session": session["session_id"],
+                "Status": "Ordered" if session.get("order") else "Basket" if cart.get("items") else "Conversation",
+                "Items": sum(i["quantity"] for i in cart.get("items", [])),
+                "Basket AED": cart.get("total_aed", 0), "Last activity": stamp or "Earlier session (time unavailable)",
+                "Order": (session.get("order") or {}).get("order_id", "—")})
+    return rows
+
+
+def board_data(store_id: str, hours: int) -> dict:
+    from tools.shared.bigquery_client import get_bigquery
+    patterns = stockout_patterns(store_id, hours)
+    insights = demand_insights(store_id, hours)
+    alerts = perishable_alerts(store_id)
+    timeline = {}
+    cutoff = now() - timedelta(hours=hours)
+    for row in get_bigquery().list_incidents(store_id):
+        stamp = datetime.fromisoformat(row["timestamp"])
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=now().tzinfo)
+        if cutoff <= stamp <= now():
+            bucket = stamp.astimezone(now().tzinfo).replace(minute=0, second=0, microsecond=0).isoformat()
+            timeline[bucket] = timeline.get(bucket, 0) + 1
+    if timeline:
+        cursor = cutoff.replace(minute=0, second=0, microsecond=0)
+        while cursor <= now():
+            timeline.setdefault(cursor.isoformat(), 0)
+            cursor += timedelta(hours=1)
+    return {"patterns": patterns, "insights": insights, "alerts": alerts,
+            "history": action_history(store_id),
+            "timeline": [{"Hour": key, "Sessions": value} for key, value in sorted(timeline.items())]}
 
 
 def google_summary(store_id: str, hours: int) -> str:

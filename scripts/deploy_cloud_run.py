@@ -309,7 +309,7 @@ def main():
     )
     credentials = local / "ACCESS.md"
     credentials.write_text(
-        f"# MIRA hosted demo access\n\nARIA: {storefront}\nUsername: mira-demo\nPassword: {aria_password}\n\nPULSE: {dashboard}\nUsername: pulse-manager\nPassword: {pulse_password}\n\nARIA uses a browser sign-in prompt. PULSE uses its manager sign-in form.\n\nThese are application demo credentials, not Google or database credentials.\n"
+        f"# MIRA hosted demo access\n\nARIA: {storefront}\nUsername: mira-demo\nPassword: {aria_password}\n\nPULSE: {dashboard}\nUsername: pulse-manager\nPassword: {pulse_password}\n\nARIA: open /login and choose Sarah, Ahmed, Fatima, Kumar or Layla. All five use the ARIA password above. Usernames: mira-demo, ahmed-demo, fatima-demo, kumar-demo, layla-demo. Use the avatar menu to switch customer or sign out. PULSE uses its manager sign-in form.\n\nThese are application demo credentials, not Google or database credentials.\n"
     )
     credentials.chmod(0o600)
     print("Credentials saved to data/local/cloud/ACCESS.md (gitignored)", flush=True)

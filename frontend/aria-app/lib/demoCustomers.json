@@ -1,0 +1,7 @@
+[
+  {"username":"mira-demo","customer_id":"sarah_123","name":"Sarah","initials":"S","email":"sarah@example.ae","dietary_preference":"halal","household_size":4,"weekly_budget_aed":300,"preferred_store":"dubai_marina_01"},
+  {"username":"ahmed-demo","customer_id":"demo_ahmed","name":"Ahmed","initials":"A","email":"demo.ahmed@mira.example","dietary_preference":"none","household_size":1,"weekly_budget_aed":150,"preferred_store":"dubai_marina_01"},
+  {"username":"fatima-demo","customer_id":"demo_fatima","name":"Fatima","initials":"F","email":"demo.fatima@mira.example","dietary_preference":"vegetarian","household_size":3,"weekly_budget_aed":250,"preferred_store":"dubai_marina_01"},
+  {"username":"kumar-demo","customer_id":"demo_kumar","name":"Kumar","initials":"K","email":"demo.kumar@mira.example","dietary_preference":"none","household_size":2,"weekly_budget_aed":200,"preferred_store":"dubai_marina_01"},
+  {"username":"layla-demo","customer_id":"demo_layla","name":"Layla","initials":"L","email":"demo.layla@mira.example","dietary_preference":"halal","household_size":5,"weekly_budget_aed":400,"preferred_store":"dubai_marina_01"}
+]

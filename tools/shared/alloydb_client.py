@@ -91,6 +91,12 @@ class AlloyDBClient(ABC):
     def list_decisions(self, store_id: str) -> list[dict]:
         raise NotImplementedError
 
+    def list_sessions(self, store_id: str) -> list[dict]:
+        raise NotImplementedError
+
+    def list_purchase_orders(self, store_id: str) -> list[dict]:
+        raise NotImplementedError
+
     def transfer_stock(self, product_id: str, source: str, destination: str, quantity: int) -> None:
         raise NotImplementedError
 
@@ -258,7 +264,14 @@ class RetailStateClient(AlloyDBClient):
         return self._sessions.get(session_id)
 
     def save_session(self, session_id: str, state: dict) -> None:
-        self._sessions[session_id] = copy.deepcopy(state)
+        previous = self._sessions.get(session_id, {})
+        self._sessions[session_id] = copy.deepcopy({**state,
+            "created_at": previous.get("created_at", now().isoformat()),
+            "updated_at": now().isoformat()})
+
+    def list_sessions(self, store_id: str) -> list[dict]:
+        return sorted([s for s in self._sessions.values() if s.get("store_id") == store_id],
+                      key=lambda s: s.get("updated_at", ""), reverse=True)
 
     def find_order(self, key: str, *, max_age_seconds: int | None = None) -> dict | None:
         for order in self._orders.values():
@@ -276,7 +289,19 @@ class RetailStateClient(AlloyDBClient):
             raise ValueError("Purchase order not found")
         if po["status"] != "pending" and po["status"] != status:
             raise ValueError("Purchase order already decided")
-        po.update(status=status, decided_at=now().isoformat())
+        # The hosted hackathon demo has no supplier integration. The explicit
+        # "Approve & restock (demo)" control simulates receipt in the same
+        # transaction as approval. Repeated approvals cannot add stock twice.
+        if status == "approved" and not po.get("inventory_received_at"):
+            # Google mode loads inventory lazily inside the active transaction.
+            self.get_product_at_store(po["product_id"], po["store_id"])
+            row = self._inventory.get((po["product_id"], po["store_id"]))
+            quantity = po.get("quantity")
+            if row is None or type(quantity) is not int or not 1 <= quantity <= 10000:
+                raise ValueError("Cannot receive purchase order: invalid inventory or quantity")
+            row["stock_quantity"] += quantity
+            po.update(inventory_received_at=now().isoformat(), execution="demo_inventory_receipt")
+        po.update(status=status, decided_at=po.get("decided_at") or now().isoformat())
         return po
 
     def save_decision(self, key: str, decision: dict) -> dict:
@@ -291,6 +316,9 @@ class RetailStateClient(AlloyDBClient):
 
     def list_decisions(self, store_id: str) -> list[dict]:
         return [d for d in self._decisions.values() if d.get("store_id") == store_id]
+
+    def list_purchase_orders(self, store_id: str) -> list[dict]:
+        return [p for p in self._purchase_orders.values() if p.get("store_id") == store_id]
 
     def list_orders(self, customer_id: str, store_id: str | None = None) -> list[dict]:
         return sorted([o for o in self._orders.values() if o.get("customer_id") == customer_id

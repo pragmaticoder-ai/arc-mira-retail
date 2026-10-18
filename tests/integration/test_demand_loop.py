@@ -280,3 +280,30 @@ def test_substitution_feedback_preserves_unsynced_manual_items():
                     product_id='rice_brown_500g', cart=[{'product_id': 'eggs_dozen', 'quantity': 1}])
     assert any(i['product_id'] == 'eggs_dozen' for i in feedback['cart']['items'])
     assert any(i['substituted'] for i in feedback['cart']['items'])
+
+
+def test_manager_receipt_updates_next_and_same_customer_without_double_stock():
+    db = get_alloydb()
+    before = chat(message="brown rice AED 50")
+    po = db.insert_purchase_order({"product_id": "rice_brown_500g", "store_id": STORE, "quantity": 10})
+    db.decide_purchase_order(po["po_id"], "approved")
+    db.decide_purchase_order(po["po_id"], "approved")
+    assert db.get_product_at_store("rice_brown_500g", STORE)["stock_quantity"] == 10
+    same = chat(message="brown rice AED 50", session_id=before["session_id"])
+    db._customers["demo_second"] = {**db.get_customer("sarah_123"), "customer_id": "demo_second", "name": "Second shopper"}
+    another = chat(message="brown rice AED 50", customer_id="demo_second")
+    for response in (same, another):
+        assert any(i["product_id"] == "rice_brown_500g" for i in response["cart"]["items"])
+    with pytest.raises(ValueError, match="already decided"):
+        db.decide_purchase_order(po["po_id"], "rejected")
+
+
+def test_rejected_po_does_not_change_stock_and_failed_receipt_rolls_back():
+    db = get_alloydb()
+    po = db.insert_purchase_order({"product_id": "rice_brown_500g", "store_id": STORE, "quantity": 10})
+    db.decide_purchase_order(po["po_id"], "rejected")
+    assert db.get_product_at_store("rice_brown_500g", STORE)["stock_quantity"] == 0
+    bad = db.insert_purchase_order({"product_id": "missing", "store_id": STORE, "quantity": 10})
+    with pytest.raises(ValueError, match="Cannot receive"):
+        db.decide_purchase_order(bad["po_id"], "approved")
+    assert next(p for p in db.list_purchase_orders(STORE) if p["po_id"] == bad["po_id"])["status"] == "pending"

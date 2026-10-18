@@ -1,5 +1,7 @@
 # Three-minute ARC demonstration
 
+Demo usernames, shared passwords and sign-in instructions: [README — Try the hosted demo](../README.md#try-the-hosted-demo).
+
 Updated October 18, 2026 · Matches product specification 1.1.
 
 For the Google-backed local setup, see [LOCAL_GOOGLE.md](LOCAL_GOOGLE.md).
@@ -77,3 +79,16 @@ Product behavior: [ARC_SPEC.md](../ARC_SPEC.md). Interfaces:
   review the updated quote before confirming.
 - After confirming, choose **View my orders**, or use **Orders** in the navigation.
   The order should remain visible after refreshing `/orders`.
+
+## Manager-to-shopper loop and customer switching
+
+Use the avatar menu to switch between Sarah, Ahmed, Fatima, Kumar and Layla; all use the shared ARIA demo password in `data/local/cloud/ACCESS.md`. PULSE → Customer activity separates their sessions, baskets and orders.
+
+1. Ask ARIA for an unavailable product and record the unmet need.
+2. In PULSE choose the same store. Review demand evidence or a stockout alert.
+3. Approve a transfer, or use **Approve & restock (demo)** to simulate PO receipt. Demand replenishment approval also simulates receipt. No supplier is contacted. Repeated approval never duplicates stock.
+4. Watch the success feedback and open **Action history**: product, timestamp, Completed/Rejected/Monitoring, and result remain visible after alerts clear.
+5. Ask the same customer again, or switch customer and request that item. ARIA reads the updated stock. Discount approval similarly changes the next quote and catalog price. A rejection changes neither stock nor price.
+6. Confirm the order explicitly and check **My orders**. PULSE's after-decision evidence is observational; financial exposure charts are estimates, not recovered revenue.
+
+Overview charts use actual recorded request sessions, product intent outcomes and separately labeled exposure estimates. Completed action/history totals cover persisted store history; demand metrics use the selected period.

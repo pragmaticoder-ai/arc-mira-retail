@@ -36,7 +36,8 @@ export default function StorePage() {
         if (!data.customer?.customer_id || !Array.isArray(data.stores)) throw new Error('Invalid store setup response')
         if (active) {
           setCustomerId(data.customer.customer_id)
-          setStoreId(data.default_store_id || data.customer.preferred_store)
+          const requestedStore=new URLSearchParams(window.location.search).get('store_id')
+          setStoreId(data.stores.some((s:Store)=>s.store_id===requestedStore) ? requestedStore : data.default_store_id || data.customer.preferred_store)
           setStores(data.stores)
         }
       })

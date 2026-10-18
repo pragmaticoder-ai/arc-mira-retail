@@ -1,6 +1,7 @@
 """ARIA: Gemini shopping proposals with server-controlled quotes and checkout."""
 from __future__ import annotations
 
+import copy
 import json
 import re
 import uuid
@@ -130,6 +131,34 @@ def _live_shopping(state: dict, req: ChatRequest) -> dict:
         plan = plan_shopping(req.message, state, catalog)
     except Exception as exc:
         raise HTTPException(502, "Google shopping planner failed; check model access and server logs") from exc
+    # Give the model one bounded correction attempt before mutating business
+    # state. Failed proposals cannot leave a partial basket or demand events.
+    for attempt in range(2):
+        if plan.action != "update_cart":
+            break
+        products = {p["product_id"]: p for p in catalog}
+        if any(i.product_id not in products for i in plan.items) or any(pid not in products for pid in plan.requested_ids):
+            raise HTTPException(502, "Planner returned a product outside this store catalog")
+        draft = copy.deepcopy(state)
+        draft.update(dietary=plan.dietary,budget=plan.budget,household=plan.household,
+            excluded_ids=plan.excluded_ids,excluded_categories=plan.excluded_categories)
+        try:
+            _quote(draft, [i.model_dump() for i in plan.items])
+            if re.search(r"\bbrown\s+rice\b", req.message, re.I):
+                available = [p for p in catalog if re.search(r"\bbrown\s+(?:basmati\s+)?rice\b",p["product_name"],re.I)
+                    and p["stock_quantity"]>0 and matches_diet(p,plan.dietary)
+                    and p["product_id"] not in plan.excluded_ids and p["category"] not in plan.excluded_categories]
+                if available and not any(i.product_id in {p["product_id"] for p in available} for i in plan.items):
+                    raise HTTPException(400, "Include the explicitly requested in-stock brown rice. Available IDs: "+", ".join(p["product_id"] for p in available[:8]))
+            break
+        except HTTPException as exc:
+            if attempt or exc.status_code != 400:
+                raise
+            feedback_state = {**state,"planner_validation_feedback":str(exc.detail)}
+            try:
+                plan = plan_shopping(req.message,feedback_state,catalog)
+            except Exception as retry_error:
+                raise HTTPException(502,"The shopping planner could not correct its basket; please retry") from retry_error
     state["conversation"] = (state.get("conversation", []) + [
         {"role": "user", "text": req.message}, {"role": "assistant", "text": plan.reply}])[-12:]
     if plan.action != "update_cart":
@@ -357,6 +386,19 @@ def product(product_id: str, store_id: str = "dubai_marina_01") -> dict:
     if item is None:
         raise HTTPException(404, "Product not found at this store")
     return item
+
+
+@app.get("/aria/orders")
+def orders(customer_id: str = "sarah_123", store_id: str | None = None,
+           page: int = Query(default=1,ge=1), page_size: int = Query(default=20,ge=1,le=50)) -> dict:
+    db=get_alloydb()
+    with db.transaction():
+        if db.get_customer(customer_id) is None:
+            raise HTTPException(404,"Customer not found")
+        rows=db.list_orders(customer_id,store_id)
+        fields=("order_id","status","store_id","items","total_aed","promotion_id","estimated_delivery_window","created_at")
+        return {"items":[{k:o.get(k) for k in fields} for o in rows[(page-1)*page_size:page*page_size]],
+                "total":len(rows),"page":page,"total_pages":max(1,(len(rows)+page_size-1)//page_size)}
 
 
 @app.get("/aria/bootstrap")

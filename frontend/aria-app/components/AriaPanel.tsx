@@ -6,7 +6,7 @@
 //   · thinking state · live cart preview · text input.
 // Calls POST /api/aria/chat (the contract endpoint) for every message.
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CartPreview } from '@/components/CartPreview'
 import { ReasoningDrawer } from '@/components/ReasoningDrawer'
@@ -36,11 +36,29 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const sessionId = useRef<string>(crypto.randomUUID())
+  const [sessionReady, setSessionReady] = useState(false)
+  const storageKey = `arc-aria-${customerId}-${storeId}`
+  useEffect(()=>{
+    try {
+      const saved=JSON.parse(sessionStorage.getItem(storageKey) || 'null')
+      if (typeof saved?.sessionId==='string') {
+        sessionId.current=saved.sessionId
+        if(Array.isArray(saved.messages)) setMessages(saved.messages.filter((m:ChatMessage)=>!m.thinking))
+        if(Array.isArray(saved.signals)) setSignals(saved.signals)
+        if(Array.isArray(saved.offers)) setOffers(saved.offers)
+      }
+    } catch { /* Start a fresh conversation if browser storage is invalid. */ }
+    setSessionReady(true)
+  },[storageKey])
+  useEffect(()=>{
+    if(sessionReady) sessionStorage.setItem(storageKey,JSON.stringify({sessionId:sessionId.current,messages:messages.filter(m=>!m.thinking),signals,offers}))
+  },[sessionReady,storageKey,messages,signals,offers])
+
 
   const send = useCallback(
     async (text: string, feedback?: 'satisfied' | 'compromise' | 'rejected', productId?: string) => {
       const trimmed = text.trim()
-      if (!trimmed || busy) return
+      if (!trimmed || busy || !sessionReady) return
       setBusy(true)
       setConfirming(['confirm', 'confirm order', 'review cart', 'yes', 'place order', 'go ahead', 'proceed'].includes(trimmed.toLowerCase()) && !feedback)
       setInput('')
@@ -110,7 +128,7 @@ export function AriaPanel({ storeId, customerId }: AriaPanelProps) {
         setConfirming(false)
       }
     },
-    [busy, customerId, storeId, setCart, setOrder, router, items, quoteId],
+    [busy, sessionReady, customerId, storeId, setCart, setOrder, router, items, quoteId],
   )
 
   return (

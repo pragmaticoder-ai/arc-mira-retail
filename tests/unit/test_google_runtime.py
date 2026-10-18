@@ -188,3 +188,42 @@ def test_greeting_does_not_create_a_quote(monkeypatch):
     assert data["cart"]["items"] == []
     assert not data["session_logged"]
     assert data["cart_changed"] is False
+
+
+def test_invalid_planner_basket_is_corrected_before_state_changes(monkeypatch):
+    import agents.aria.main as aria
+    import agents.google_runtime as runtime
+
+    seen = []
+
+    def propose(message, state, catalog):
+        seen.append(state)
+        if len(seen) == 1:
+            return runtime.ShoppingPlan(
+                action="update_cart",
+                reply="Bad proposal",
+                dietary="vegan",
+                budget=300,
+                household=4,
+                items=[runtime.BasketItem(product_id="chicken_whole_1kg", quantity=1)],
+            )
+        assert state.get("planner_validation_feedback")
+        assert state["cart"]["items"] == []
+        return runtime.ShoppingPlan(
+            action="update_cart",
+            reply="A corrected basket.",
+            dietary="halal",
+            budget=300,
+            household=4,
+            items=[runtime.BasketItem(product_id="milk_almarai_2l", quantity=2)],
+        )
+
+    monkeypatch.setattr(aria, "settings", SimpleNamespace(use_mock=False))
+    monkeypatch.setattr(runtime, "plan_shopping", propose)
+    result = TestClient(aria.app).post(
+        "/aria/chat", json={"message": "Weekly groceries for a family of 4, AED 300."}
+    )
+    assert result.status_code == 200
+    assert len(seen) == 2
+    assert result.json()["cart"]["items"][0]["product_id"] == "milk_almarai_2l"
+    assert result.json()["cart"]["total_aed"] <= 300

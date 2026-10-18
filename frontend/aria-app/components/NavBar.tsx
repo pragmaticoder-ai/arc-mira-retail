@@ -4,6 +4,7 @@
 // Dark top nav (#0f172a / slate-900) per BRAND.md. Light logo variant,
 // search box, store selector, cart button with live count, avatar.
 
+import Link from 'next/link'
 import { MiraLogo } from '@/components/MiraLogo'
 import { useCart } from '@/context/CartContext'
 import type { Store } from '@/lib/types'
@@ -30,7 +31,7 @@ export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: Nav
           <a className="hover:text-white" href="/#offers">
             Offers
           </a>
-          <a className="hover:text-white" href="/#orders">
+          <a className="hover:text-white" href="/orders">
             Orders
           </a>
         </nav>
@@ -58,8 +59,8 @@ export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: Nav
           ))}
         </select>
 
-        <button
-          type="button"
+        <Link
+          href={`/cart?store_id=${encodeURIComponent(storeId)}`}
           aria-label={`Cart, ${itemCount} items`}
           className="relative flex h-9 w-9 items-center justify-center rounded-md text-slate-200 hover:bg-slate-800"
         >
@@ -69,7 +70,7 @@ export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: Nav
               {itemCount}
             </span>
           )}
-        </button>
+        </Link>
 
         <div
           aria-hidden="true"

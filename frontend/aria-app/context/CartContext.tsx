@@ -38,6 +38,8 @@ interface CartContextValue {
   /** Manual add from the product grid. */
   addProduct: (productId: string, quantity?: number) => void
   removeProduct: (productId: string) => void
+  setQuantity: (productId: string, quantity: number) => void
+  hydrated: boolean
   setOrder: (order: OrderConfirmation | null) => void
   reset: () => void
 }
@@ -55,15 +57,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem('arc-checkout') || 'null')
-      if (saved?.order && Array.isArray(saved.items)) {
-        setItems(saved.items); setPromotion(saved.promotion); setOrderState(saved.order)
+      if (Array.isArray(saved?.items)) {
+        setItems(saved.items); setPromotion(saved.promotion || null); setOrderState(saved.order || null); setQuoteId(saved.quoteId || null); setCatalog(Array.isArray(saved.catalog) ? saved.catalog : [])
       }
     } catch { /* A corrupt local snapshot starts a fresh basket. */ }
     setHydrated(true)
   }, [])
   useEffect(() => {
-    if (hydrated) sessionStorage.setItem('arc-checkout', JSON.stringify({ items, promotion, order }))
-  }, [hydrated, items, promotion, order])
+    if (hydrated) sessionStorage.setItem('arc-checkout', JSON.stringify({ items, promotion, order, quoteId, catalog: catalog.filter(p=>items.some(i=>i.product_id===p.product_id)) }))
+  }, [hydrated, items, promotion, order, quoteId, catalog])
 
   const registerProducts = useCallback((products: Product[]) => {
     setCatalog(previous => {
@@ -126,6 +128,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((i) => i.product_id !== productId))
   }, [])
 
+  const setQuantity = useCallback((productId: string, quantity: number) => {
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > 1000) return
+    if (quantity === 0) { removeProduct(productId); return }
+    const product = catalog.find(p=>p.product_id===productId)
+    if (!product || quantity > product.stock_quantity) return
+    setItems(prev=>prev.map(item=>item.product_id===productId ? {...item,quantity} : item))
+    setPromotion(null); setQuoteId(null)
+  }, [catalog, removeProduct])
+
   const setOrder = useCallback((o: OrderConfirmation | null) => {
     setOrderState(o)
   }, [])
@@ -136,6 +147,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setOrderState(null)
     setQuoteId(null)
     sessionStorage.removeItem('arc-checkout')
+    Object.keys(sessionStorage).filter(key=>key.startsWith('arc-aria-')).forEach(key=>sessionStorage.removeItem(key))
   }, [])
 
   const total_aed = useMemo(
@@ -161,7 +173,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     productIds,
     setCart,
     addProduct,
-    removeProduct,
+    removeProduct, setQuantity, hydrated,
     setOrder,
     reset,
   }

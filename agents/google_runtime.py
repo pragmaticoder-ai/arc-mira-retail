@@ -52,7 +52,12 @@ async def invoke(name: str, instruction: str, payload: dict, schema=None) -> str
         model=settings.gemini_flash_model,
         instruction=instruction,
         output_schema=schema,
-        generate_content_config=types.GenerateContentConfig(temperature=0),
+        generate_content_config=types.GenerateContentConfig(
+            temperature=0,
+            max_output_tokens=4096,
+            thinking_config=types.ThinkingConfig(thinking_budget=1024),
+            http_options=types.HttpOptions(timeout=60000),
+        ),
     )
     runner = Runner(app_name=name, agent=agent, session_service=session_service)
     reply = ""
@@ -96,18 +101,53 @@ def plan_shopping(message: str, state: dict, inventory: list[dict]) -> ShoppingP
     items. Do not silently replace a requested unavailable product. Ask for clarification when
     necessary; preserve the previous basket while asking. Never claim an order was placed.
     dietary_compatibility lists server-evaluated suitability, not certification.
-    MIRA applies the halal preference ONLY to meat products (category halal_meat).
+    MIRA requires halal labels for land-animal meat and poultry only.
+    The legacy halal_meat category also contains seafood: seafood does NOT require
+    a halal slaughter label. Use requires_halal_meat_label and dietary_compatibility.
     Never exclude rice, produce or other non-meat groceries for lacking a halal flag.
     Do not tell the customer non-meat products need a halal label to be included.
     Missing certification alone does not mean a product is non-halal. Never claim
     halal certification unless the catalog explicitly supplies it.
     Prices, promotions and checkout are validated by the server. For recipes, explain any
     assumptions and missing ingredients; do not claim completeness without catalog coverage.
+    A request such as 'Weekly halal groceries, family of 4, AED 300. Include brown rice.'
+    is an explicit update_cart request. Build a varied weekly starter basket across
+    staples, vegetables, fruit, dairy and suitable proteins, sized reasonably for
+    the household and using actual pack sizes. Include an in-stock brown rice when
+    available; do not select an unavailable SKU when another brown rice is stocked.
+    Do not substitute white rice for requested brown rice without consent.
+    Keep the sum of unit prices times quantities within budget BEFORE promotions.
+    Briefly explain the basket, household, budget, and any missing requested item.
+    Do not claim a complete nutrition or meal plan. If a previous proposal failed
+    validation, correct it using validation_feedback, keeping valid requested items.
     Return the required structured JSON. reply is a concise customer-facing explanation,
     with no invented price totals. Do not report internal reasoning."""
-    from tools.shared.dietary import matches_diet
+    from tools.shared.dietary import matches_diet, requires_halal_meat_label
 
-    inventory = [{**p, "dietary_compatibility": [d for d in ("halal", "vegetarian", "vegan") if matches_diet(p, d)]} for p in inventory]
+    inventory = [
+        {
+            **{
+                k: p[k]
+                for k in (
+                    "product_id",
+                    "product_name",
+                    "category",
+                    "stock_quantity",
+                    "dietary_flags",
+                    "attributes",
+                )
+                if k in p
+            },
+            "price_aed": p.get("discounted_price_aed")
+            if p.get("discount_active")
+            else p["price_aed"],
+            "requires_halal_meat_label": requires_halal_meat_label(p),
+            "dietary_compatibility": [
+                d for d in ("halal", "vegetarian", "vegan") if matches_diet(p, d)
+            ],
+        }
+        for p in inventory
+    ]
     payload = {
         "message": message,
         "conversation": state.get("conversation", []),
@@ -123,6 +163,7 @@ def plan_shopping(message: str, state: dict, inventory: list[dict]) -> ShoppingP
             )
         },
         "catalog": inventory,
+        "validation_feedback": state.get("planner_validation_feedback"),
     }
     return ShoppingPlan.model_validate_json(
         asyncio.run(invoke("aria_planner", prompt, payload, ShoppingPlan))

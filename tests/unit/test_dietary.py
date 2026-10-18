@@ -67,3 +67,26 @@ def test_halal_catalog_filter_keeps_nonmeat():
     where, _ = filters("store", "all", "", None, None, False, {"halal": ["true"]})
     assert "category<>'halal_meat'" in where
     assert "string_to_array(dietary_flags" in where
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["555 Tuna Flakes In Oil 155 g", "Fresh Salmon Fillet", "Sardines in Tomato Sauce"],
+)
+def test_seafood_does_not_require_slaughter_label(name):
+    from tools.shared.dietary import protein_type
+
+    p = product(product_name=name, category="halal_meat")
+    assert protein_type(p) == "seafood"
+    assert matches_diet(p, "halal")
+    assert not matches_diet(p, "vegan")
+    assert p["dietary_flags"] == ""
+
+
+def test_seafood_name_cannot_hide_land_meat():
+    p = product(product_name="Fish and Chicken Dumplings", category="halal_meat")
+    assert not matches_diet(p, "halal")
+    p = product(
+        product_name="Tuna Salad", category="halal_meat", ingredients="Tuna, ham"
+    )
+    assert not matches_diet(p, "halal")

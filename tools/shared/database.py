@@ -22,8 +22,8 @@ def get_engine():
         if "/versions/" not in name:
             name += "/versions/latest"
         password = (
-            secretmanager.SecretManagerServiceClient()
-            .access_secret_version(request={"name": name})
+            secretmanager.SecretManagerServiceClient(transport="rest")
+            .access_secret_version(request={"name": name}, timeout=30)
             .payload.data.decode()
         )
     if not password:

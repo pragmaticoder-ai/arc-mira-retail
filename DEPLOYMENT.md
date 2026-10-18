@@ -155,7 +155,15 @@ Before publishing an actual cloud prototype:
    data connectivity, persistence across instances and the complete feedback loop.
 7. Validate the demo and submission artifacts against current event requirements.
 
+## 6. Google Cloud deployment infrastructure
+
+Production and cloud-ready infrastructure assets are located in:
+- `terraform/`: Complete Terraform configuration (VPC, Cloud SQL / AlloyDB, BigQuery, Artifact Registry, Secret Manager, Cloud Run).
+- `cloudbuild.yaml`: Google Cloud Build pipeline for parallel container builds.
+- `scripts/setup_gcp_project.sh`: Automated script to check project, link billing, and enable required Google Cloud APIs.
+- `scripts/deploy_gcp.sh`: Master one-click deployment script.
+- `scripts/init_gcp_db.py`: Database schema and seed loader for PostgreSQL / AlloyDB and BigQuery.
+- `docs/GCP_INFRASTRUCTURE.md`: Full architecture specification, topology diagram, and cost-optimization guide.
+
 AlloyDB/BigQuery SQL in `data/schema` and ADK bindings/prompts are starting assets.
-They do not establish deployed infrastructure. Local SQLite cannot be shared by
-independent Cloud Run instances. Supplier delivery, logistics execution and
-payments require their own integrations and remain outside the local simulation.
+Supplier delivery, logistics execution and payments require their own integrations and remain outside the local simulation.

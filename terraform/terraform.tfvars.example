@@ -1,0 +1,18 @@
+# Google Cloud Configuration
+project_id  = "aria-mira-retail"
+region      = "asia-southeast1"
+zone        = "asia-southeast1-a"
+environment = "hackathon"
+
+# Database Configuration
+# Set enable_alloydb = false and use_cloud_sql = true for cost-conscious hackathon dev (~$8/month)
+# Set enable_alloydb = true for full enterprise AlloyDB cluster with ScaNN vector extensions
+enable_alloydb = false
+use_cloud_sql  = true
+cloud_sql_tier = "db-f1-micro"
+
+# Serverless Compute
+cloud_run_min_instances = 0 # Scale to 0 when idle to prevent costs
+cloud_run_max_instances = 3
+deploy_cloud_run_services = true
+use_mock                = true # Set to false once live database is seeded

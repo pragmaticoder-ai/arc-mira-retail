@@ -292,6 +292,11 @@ class RetailStateClient(AlloyDBClient):
     def list_decisions(self, store_id: str) -> list[dict]:
         return [d for d in self._decisions.values() if d.get("store_id") == store_id]
 
+    def list_orders(self, customer_id: str, store_id: str | None = None) -> list[dict]:
+        return sorted([o for o in self._orders.values() if o.get("customer_id") == customer_id
+            and (store_id is None or o.get("store_id") == store_id)],
+            key=lambda o: (o.get("created_at", ""), o["order_id"]), reverse=True)
+
     def transfer_stock(self, product_id: str, source: str, destination: str, quantity: int) -> None:
         src = self._inventory.get((product_id, source))
         dst = self._inventory.get((product_id, destination))

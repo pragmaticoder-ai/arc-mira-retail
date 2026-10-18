@@ -16,7 +16,7 @@ export default function ProductDetails({ params }: { params: { productId: string
     const query=new URLSearchParams(window.location.search)
     const store=query.get('store_id') || 'dubai_marina_01'
     const returnTo=query.get('return_to') || `/?store_id=${encodeURIComponent(store)}`
-    setBack(returnTo==='/' || returnTo.startsWith('/?') ? returnTo : '/')
+    setBack(returnTo==='/' || returnTo.startsWith('/?') || returnTo.startsWith('/cart?') ? returnTo : '/')
     fetch(`/api/aria/products/${encodeURIComponent(params.productId)}?store_id=${encodeURIComponent(store)}`,{signal:controller.signal,cache:'no-store'})
       .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error_message || 'Product unavailable');return body})
       .then(body=>{if(!controller.signal.aborted){setProduct(body);setImage(body.image_url || '');registerProducts([body])}})
@@ -38,8 +38,8 @@ export default function ProductDetails({ params }: { params: { productId: string
         <p className="mt-2 text-sm text-slate-600">{product.stock_quantity>0?`${product.stock_quantity} in stock`:'Currently unavailable'}</p>
         <button disabled={product.stock_quantity<=0} onClick={()=>addProduct(product.product_id)} className="btn-primary mt-5 disabled:opacity-40">{quantity?`In basket (${quantity}) · add one`:'Add to cart'}</button>
 
-        <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">{Object.entries(product.attributes || {}).map(([key,value])=><div key={key}><dt className="text-slate-500">{key.replaceAll('_',' ')}</dt><dd>{value==='true'?'Yes':value==='false'?'No':value}</dd></div>)}</dl>
-        {product.category==='halal_meat' && !product.dietary_flags.split(',').includes('halal') && <p className="mt-3 text-xs text-slate-500">Halal certification is unverified.</p>}
+        <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">{Object.entries(product.attributes || {}).filter(([key,value])=>key!=='protein_type' || value!=='other').map(([key,value])=><div key={key}><dt className="text-slate-500">{key.replaceAll('_',' ')}</dt><dd>{value==='true'?'Yes':value==='false'?'No':value}</dd></div>)}</dl>
+        {product.category==='halal_meat' && product.attributes?.protein_type!=='seafood' && !product.dietary_flags.split(',').includes('halal') && <p className="mt-3 text-xs text-slate-500">Halal certification is unverified.</p>}
       </div>
     </div>
     {product.description && <section className="mt-10"><h2 className="mb-3 text-lg font-medium">About this product</h2><p className="whitespace-pre-line text-sm leading-6 text-slate-600">{product.description}</p></section>}

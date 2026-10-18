@@ -77,7 +77,7 @@ def filters(store_id, category, q, min_price, max_price, in_stock, attributes):
                 params[token] = value
             else:
                 if key == "halal" and value == "true":
-                    choices.append("(category<>'halal_meat' OR 'halal'=ANY(string_to_array(dietary_flags, ',')))")
+                    choices.append("(category<>'halal_meat' OR attributes->>'protein_type'='seafood' OR 'halal'=ANY(string_to_array(dietary_flags, ',')))")
                 else:
                     choices.append(f"attributes @> CAST(:{token} AS JSONB)")
                 params[token] = json.dumps({key: value})
@@ -201,21 +201,26 @@ def planner_candidates(store_id, message, product_ids):
         from tools.shared.alloydb_client import get_alloydb
 
         return get_alloydb().list_inventory(store_id)
-    words = re.findall(r"[a-zA-Z]{3,}", message.lower())[:40]
+    stop = {"weekly", "groceries", "grocery", "family", "people", "include", "including", "please", "need", "want", "halal", "aed", "for", "with", "the", "and", "cart", "basket"}
+    words = [w for w in re.findall(r"[a-zA-Z]{3,}", message.lower()) if w not in stop][:40]
     query = " | ".join(words)
     with get_engine().connect() as conn:
         rows = conn.execute(
             text(f"""
-            WITH ranked AS (
-                SELECT {LIST_COLUMNS},
-                    ROW_NUMBER() OVER(PARTITION BY category ORDER BY stock_quantity>0 DESC,product_name,product_id) position
+            WITH typed AS (
+                SELECT product_id,category,stock_quantity,price_aed,
+                    ROW_NUMBER() OVER(PARTITION BY category,COALESCE(attributes->>'product_type',category)
+                        ORDER BY stock_quantity>0 DESC,price_aed,product_id) subtype_position
                 FROM inventory WHERE store_id=:store
+            ), ranked AS (
+                SELECT product_id,ROW_NUMBER() OVER(PARTITION BY category
+                    ORDER BY stock_quantity>0 DESC,subtype_position,price_aed,product_id) position FROM typed
             ), candidates AS (
-                SELECT product_id FROM ranked WHERE position<=5
+                SELECT product_id FROM ranked WHERE position<=8
                 UNION SELECT product_id FROM inventory WHERE store_id=:store AND product_id=ANY(:ids)
                 UNION (SELECT product_id FROM inventory WHERE store_id=:store
                     AND to_tsvector('english',product_name) @@ to_tsquery('english',:query)
-                    ORDER BY ts_rank(to_tsvector('english',product_name),to_tsquery('english',:query)) DESC,product_id LIMIT 60)
+                    ORDER BY stock_quantity>0 DESC,ts_rank(to_tsvector('english',product_name),to_tsquery('english',:query)) DESC,product_id LIMIT 48)
             ) SELECT {LIST_COLUMNS} FROM inventory WHERE store_id=:store
                 AND product_id IN (SELECT product_id FROM candidates)
             ORDER BY product_id

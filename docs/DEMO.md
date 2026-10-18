@@ -67,3 +67,13 @@ See [EVALUATION.md](EVALUATION.md) before presenting those numbers.
 Product behavior: [ARC_SPEC.md](../ARC_SPEC.md). Interfaces:
 [AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md). Full setup:
 [DEPLOYMENT.md](../DEPLOYMENT.md).
+
+## Shopping navigation checks
+
+- Ask: `Weekly halal groceries, family of 4, AED 300. Include brown rice.`
+  Check that the proposed basket includes stocked brown rice and stays within
+  AED 300. Seafood does not require a halal slaughter label.
+- Open the cart icon to review `/cart`. Change a quantity or remove an item;
+  review the updated quote before confirming.
+- After confirming, choose **View my orders**, or use **Orders** in the navigation.
+  The order should remain visible after refreshing `/orders`.

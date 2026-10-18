@@ -66,6 +66,7 @@ export default function OrderConfirmedPage() {
           it to the store manager automatically.
         </div>
 
+        <Link href="/orders" className="btn-secondary mb-md block w-full text-center">View my orders</Link>
         <Link href="/" onClick={reset} className="btn-primary block w-full text-center">
           Continue shopping
         </Link>

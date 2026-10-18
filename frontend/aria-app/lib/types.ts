@@ -170,3 +170,10 @@ export interface CatalogPage {
   facets: CatalogFacets
   price_range: { min: number; max: number }
 }
+
+export interface OrderRecord extends OrderConfirmation {
+  store_id: string
+  items: CartItem[]
+  promotion_id: string | null
+  created_at: string
+}

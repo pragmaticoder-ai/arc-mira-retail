@@ -101,7 +101,7 @@ class RealVectorSearch(VectorSearch):
             1 - (embedding <=> CAST(:vector AS vector)) AS similarity_score
             FROM inventory WHERE store_id=:store AND stock_quantity > 0 AND embedding IS NOT NULL
             AND (CAST(:excluded AS TEXT) IS NULL OR product_id != :excluded)
-            AND (:diet='none' OR :diet=ANY(string_to_array(dietary_flags, ',')) OR (:diet='halal' AND category<>'halal_meat'))
+            AND (:diet='none' OR :diet=ANY(string_to_array(dietary_flags, ',')) OR (:diet='halal' AND (category<>'halal_meat' OR attributes->>'protein_type'='seafood')))
             AND {price} >= :minimum AND (CAST(:maximum AS NUMERIC)=0 OR {price} <= :maximum)
             ORDER BY embedding <=> CAST(:vector AS vector) LIMIT :limit"""
         with get_engine().connect() as conn:

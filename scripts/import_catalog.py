@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text  # noqa: E402
 
 from tools.shared.database import get_engine  # noqa: E402
+from tools.shared.dietary import protein_type  # noqa: E402
 from tools.shared.settings import settings  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,14 @@ def main():
             k: re.sub(r"(?i)\b(?:lulu(?: hypermarket)?|carrefour)\b", "MIRA", str(v))
             for k, v in (row["attributes"] or {}).items()
         }
+        row["attributes"]["protein_type"] = protein_type(
+            {
+                **record,
+                "ingredients": (record.get("source_attributes") or {}).get(
+                    "ingredients"
+                ),
+            }
+        )
         row["store_id"] = STORE
         row["inventory_origin"] = "demo_import"
         if record.get("source_stock_quantity") is None:

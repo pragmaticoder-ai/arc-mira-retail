@@ -1,5 +1,9 @@
 # ARC — Agentic Retail Command
 
+**[▶ Watch the 3:24 live demo — substitution → manager-approved PO → original item back in stock](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4)**
+
+[Recording details and repository video copy](presentation/README.md)
+
 ARC connects **ARIA**, a grocery shopping assistant, with **PULSE**, a store operations dashboard. Customer preferences and unmet needs remain visible even when a shopper accepts a temporary alternative. A manager reviews the evidence, approves an action, and sees subsequent shopper outcomes.
 
 **Team:** Pragmatic Engineers · **Theme:** Retail & Commerce
@@ -96,5 +100,8 @@ For a configured deployment, `.venv/bin/python scripts/smoke_cloud.py` runs the 
 
 [ARC_SPEC.md](ARC_SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md), [AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) and the [specification index](specs/README.md) document the system. For the current hosted setup and demo receipt behavior, use [CLOUD_RUN.md](docs/CLOUD_RUN.md) and [SPEC-PULSE-08](specs/SPEC-PULSE-08-manager_decisions.md). Older local-only descriptions in other documents may predate the Google deployment.
 
+## Submission demo video
 
-Demo video (3 minutes 24 seconds, AI narration): [Watch the closed-loop walkthrough](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4).
+**[Watch the 3:24 AI-narrated demo and view presentation materials](https://github.com/pragmaticoder-ai/arc-mira-retail/tree/main/presentation)**
+
+[Direct video playback](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4).

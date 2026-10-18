@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { CustomerMenu } from '@/components/CustomerMenu'
 import { useEffect, useState } from 'react'
 import { AriaPanel } from '@/components/AriaPanel'
 import { useCart } from '@/context/CartContext'
@@ -34,7 +35,7 @@ export default function CartPage() {
   if(error)return <main className="p-8" role="alert">{error} <Link href="/" className="underline">Back to groceries</Link></main>
   if(!setup || !hydrated)return <main className="p-8" role="status">Loading your basket…</main>
   return <div className="flex min-h-screen flex-col">
-    <header className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 px-6 py-4 text-white"><Link href={`/?store_id=${encodeURIComponent(setup.storeId)}`}>← Continue shopping</Link><span>MIRA · {setup.storeName}</span><Link href="/orders">My orders</Link></header>
+    <header className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 px-6 py-4 text-white"><Link href={`/?store_id=${encodeURIComponent(setup.storeId)}`}>← Continue shopping</Link><span>MIRA · {setup.storeName}</span><div className="flex items-center gap-4"><Link href="/orders">My orders</Link><CustomerMenu/></div></header>
     <div className="flex flex-1 flex-col md:flex-row">
       <main className="flex-1 p-5 md:p-10"><h1 className="text-2xl font-medium">Your basket</h1>
         {!items.length?<div className="mt-8 rounded-lg border bg-white p-8"><p>Your basket is empty.</p><Link className="btn-primary mt-4 inline-block" href={`/?store_id=${encodeURIComponent(setup.storeId)}`}>Browse groceries</Link></div>:<>

@@ -5,7 +5,7 @@ Updated October 18, 2026 · Specification 1.1 · Implemented local workflow
 ## 1. Purpose
 
 Persist a human decision before showing success, propagate it to the shopper's
-actual local inventory/prices, and distinguish later observations from prior evidence.
+shared inventory/prices, and distinguish later observations from prior evidence.
 
 ## 2. Interfaces
 
@@ -34,8 +34,7 @@ adapter directly; no separate PO-decision HTTP route is implemented.
 ## 4. Write behavior
 
 Transfer validates source safety stock and updates source/destination atomically.
-Its execution label is local_inventory_simulation. Replenishment creates a PO draft
-and does not add inventory; approving the demand action is not PO approval. Defer
+Its execution label is local_inventory_simulation. In the hackathon demo, replenishment approval creates/reuses a PO, approves it, and simulates receipt into shared inventory atomically. The explicit **Approve & restock (demo)** PO control follows the same path. `inventory_received_at` prevents repeated approvals from adding units twice. Execution is `demo_inventory_receipt`; no supplier is contacted. Previously approved legacy POs remain awaiting receipt until explicitly received. Defer
 records observation_only. Discount approval writes percentage, effective price and
 active flag to the selected store; rejection does not activate it.
 
@@ -53,10 +52,11 @@ status. Describe these as observations, never proven intervention effects or
 realized financial recovery. A confirmed order containing the requested original
 is the concrete fulfillment signal.
 
+Action history retains approved, completed, rejected and monitoring decisions even after an alert disappears. It shows product, result, timestamp and reference. UI feedback appears only after persistence succeeds.
+
 ## 6. Integration boundaries
 
-The storefront and dashboard require identical absolute storage paths in separate
-Python processes. The two databases are not one distributed transaction. Cloud
+Google mode uses the same Cloud SQL database and BigQuery dataset across Cloud Run services. Offline SQLite mode requires identical absolute storage paths in separate Python processes. The two databases are not one distributed transaction. Cloud
 release requires managed storage and reliable event delivery. UI success state
 cannot substitute for persisted operational state.
 

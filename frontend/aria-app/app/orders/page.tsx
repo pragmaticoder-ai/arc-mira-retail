@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { CustomerMenu } from '@/components/CustomerMenu'
 import { useEffect, useState } from 'react'
 import type { OrderRecord, Store } from '@/lib/types'
 
@@ -27,7 +28,7 @@ export default function OrdersPage() {
     return()=>controller.abort()
   },[page,refresh])
   return <main className="mx-auto min-h-screen max-w-5xl p-5 md:p-10">
-    <nav className="mb-6 flex justify-between text-sm text-mira-700"><Link href="/">← Back to groceries</Link><Link href="/cart">View basket</Link></nav>
+    <nav className="mb-6 flex justify-between text-sm text-mira-700"><Link href="/">← Back to groceries</Link><div className="flex items-center gap-4"><Link href="/cart">View basket</Link><CustomerMenu/></div></nav>
     <div className="flex items-center justify-between"><h1 className="text-2xl font-medium">My orders</h1><button disabled={loading} className="btn-secondary" onClick={()=>setRefresh(n=>n+1)}>Refresh</button></div>
     <p className="mt-2 text-sm text-slate-500">Confirmed orders from your MIRA stores.</p>
     {error && <p role="alert" className="mt-5 rounded bg-amber-50 p-4 text-amber-800">{error}</p>}

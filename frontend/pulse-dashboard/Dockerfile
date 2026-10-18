@@ -18,6 +18,7 @@ RUN uv pip install -r requirements-dashboard.txt
 # Copy application source
 COPY tools/ ./tools/
 COPY frontend/pulse-dashboard/ ./frontend/pulse-dashboard/
+COPY frontend/pulse-dashboard/.streamlit/config.toml ./.streamlit/config.toml
 
 ENV PYTHONPATH="/app:/app/frontend/pulse-dashboard"
 ENV PORT=8080

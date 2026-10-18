@@ -41,7 +41,7 @@ def serialize(row):
     return data
 
 
-def filters(store_id, category, q, min_price, max_price, in_stock, attributes):
+def filters(store_id, category, q, min_price, max_price, in_stock, attributes, offers_only=False):
     where = ["store_id=:store"]
     params = {"store": store_id}
     if category and category != "all":
@@ -60,6 +60,8 @@ def filters(store_id, category, q, min_price, max_price, in_stock, attributes):
         params["maximum"] = max_price
     if in_stock:
         where.append("stock_quantity>0")
+    if offers_only:
+        where.append("discount_active=true AND COALESCE(discount_pct,0)>0 AND stock_quantity>0")
     for index, (key, values) in enumerate(attributes.items()):
         if key not in FACET_KEYS:
             raise ValueError("Unsupported facet")
@@ -99,6 +101,7 @@ def list_products(
     max_price=None,
     in_stock=False,
     attributes=None,
+    offers_only=False,
 ):
     order = {
         "name": "product_name,product_id",
@@ -111,7 +114,7 @@ def list_products(
     if not 1 <= page_size <= 96 or page < 1:
         raise ValueError("Invalid page")
     where, params = filters(
-        store_id, category, q, min_price, max_price, in_stock, attributes or {}
+        store_id, category, q, min_price, max_price, in_stock, attributes or {}, offers_only
     )
     with get_engine().connect() as conn:
         summary = (
@@ -144,6 +147,7 @@ def list_products(
                 max_price,
                 in_stock,
                 {k: v for k, v in (attributes or {}).items() if k != key},
+                offers_only,
             )
             facet_where = re.sub(
                 r":([a-z_0-9]+)\b", lambda m: f":f{index}_{m[1]}", facet_where

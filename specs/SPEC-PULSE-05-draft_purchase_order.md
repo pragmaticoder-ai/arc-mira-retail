@@ -6,8 +6,7 @@ Updated October 18, 2026 · Specification 1.1 · Implemented local behavior
 
 Implemented local tool. Processing behavior and limits are specified below.
 
-Google execution/adapters remain deferred. This specification supersedes the
-original cloud-first implementation plan for this tool.
+Google mode uses shared Cloud SQL operational records. Offline tests use explicit memory/SQLite adapters.
 
 ## 2. Interfaces
 
@@ -42,7 +41,7 @@ Quantity 1–10000; supported urgency; nonempty justification <=1000 chars; evid
 
 ## 5. Response
 
-po_id, product_id, product_name, quantity, urgency, justification, modeled impact, evidence_summary, status, human_approval_required, created_at. Replenishment decisions and PO decisions are separate. Callers may request different quantities, but deduplication preserves the existing draft.
+po_id, product_id, product_name, quantity, urgency, justification, modeled impact, evidence_summary, status, human_approval_required, created_at, optional inventory_received_at and execution. Drafting remains pending. Explicit manager PO approval or demand replenishment approval simulates a one-time delivery in this hackathon demo; see SPEC-PULSE-08. Callers may request different quantities, but deduplication preserves the existing draft.
 
 ## 6. Persistence and errors
 

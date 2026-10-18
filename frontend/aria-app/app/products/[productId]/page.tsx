@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { CustomerMenu } from '@/components/CustomerMenu'
 import { useEffect,useState } from 'react'
 import { useCart } from '@/context/CartContext'
 import type { Product } from '@/lib/types'
@@ -28,7 +29,7 @@ export default function ProductDetails({ params }: { params: { productId: string
   const price=product.discount_active && product.discounted_price_aed!=null?product.discounted_price_aed:product.price_aed
   const quantity=items.find(i=>i.product_id===product.product_id)?.quantity || 0
   return <main className="mx-auto max-w-6xl p-5 md:p-10">
-    <Link href={back} className="text-sm text-mira-700 underline">← Back to groceries</Link>
+    <nav className="flex items-center justify-between"><Link href={back} className="text-sm text-mira-700 underline">← Back to groceries</Link><div className="flex items-center gap-4"><Link href={`/cart?store_id=${encodeURIComponent(product.store_id)}`} className="text-mira-700">View basket</Link><CustomerMenu/></div></nav>
     <div className="mt-6 grid gap-8 md:grid-cols-2">
       <div><div className="flex h-80 items-center justify-center rounded-lg border bg-white p-5">{image?<img src={image} alt={product.product_name} className="h-full w-full object-contain"/>:<span className="text-slate-400">No image provided</span>}</div>
         <div className="mt-3 flex gap-2 overflow-x-auto">{(product.images || []).map(src=><button aria-label="View product image" onClick={()=>setImage(src)} key={src} className={`h-16 w-16 shrink-0 rounded border p-1 ${image===src?'border-mira-600':''}`}><img src={src} alt="" className="h-full w-full object-contain" loading="lazy"/></button>)}</div>
@@ -36,7 +37,7 @@ export default function ProductDetails({ params }: { params: { productId: string
       <div><p className="text-sm text-slate-500">{product.brand}</p><h1 className="mt-1 text-2xl font-medium">{product.product_name}</h1>
         <p className="mt-4 text-2xl font-medium text-mira-700">AED {price.toFixed(2)} <span className="text-sm font-normal text-slate-500">{product.attributes?.pack_size || ''}{product.unit_type && product.unit_type!=='qty'?` · ${product.unit_type}`:''}</span></p>
         <p className="mt-2 text-sm text-slate-600">{product.stock_quantity>0?`${product.stock_quantity} in stock`:'Currently unavailable'}</p>
-        <button disabled={product.stock_quantity<=0} onClick={()=>addProduct(product.product_id)} className="btn-primary mt-5 disabled:opacity-40">{quantity?`In basket (${quantity}) · add one`:'Add to cart'}</button>
+        <button disabled={product.stock_quantity<=quantity} onClick={()=>addProduct(product.product_id)} className="btn-primary mt-5 disabled:opacity-40">{quantity?`In basket (${quantity}) · add one`:'Add to cart'}</button>
 
         <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">{Object.entries(product.attributes || {}).filter(([key,value])=>key!=='protein_type' || value!=='other').map(([key,value])=><div key={key}><dt className="text-slate-500">{key.replaceAll('_',' ')}</dt><dd>{value==='true'?'Yes':value==='false'?'No':value}</dd></div>)}</dl>
         {product.category==='halal_meat' && product.attributes?.protein_type!=='seafood' && !product.dietary_flags.split(',').includes('halal') && <p className="mt-3 text-xs text-slate-500">Halal certification is unverified.</p>}

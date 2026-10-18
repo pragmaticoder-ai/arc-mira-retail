@@ -7,6 +7,7 @@ import { useCart } from '@/context/CartContext'
 import type { Category, CatalogFacets, CatalogPage } from '@/lib/types'
 
 interface ProductGridProps {
+  offersOnly: boolean
   category: Category | 'all'
   halalOnly: boolean
   maxBudget: number
@@ -17,8 +18,8 @@ interface ProductGridProps {
   onFacets: (facets: CatalogFacets) => void
 }
 
-export function ProductGrid({ category, halalOnly, maxBudget, storeId, search, attributes, inStock, onFacets }: ProductGridProps) {
-  const { productIds, addProduct, registerProducts } = useCart()
+export function ProductGrid({ offersOnly, category, halalOnly, maxBudget, storeId, search, attributes, inStock, onFacets }: ProductGridProps) {
+  const { productIds, items, addProduct, registerProducts } = useCart()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(24)
   const [sort, setSort] = useState('name')
@@ -27,7 +28,7 @@ export function ProductGrid({ category, halalOnly, maxBudget, storeId, search, a
   const [loading, setLoading] = useState(true)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   const section = useRef<HTMLElement>(null)
-  const filterKey = JSON.stringify({ category, halalOnly, maxBudget, storeId, search: debouncedSearch, attributes, inStock, sort, pageSize })
+  const filterKey = JSON.stringify({ offersOnly, category, halalOnly, maxBudget, storeId, search: debouncedSearch, attributes, inStock, sort, pageSize })
   const previousFilter = useRef(filterKey)
 
   useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(timer) }, [search])
@@ -37,7 +38,7 @@ export function ProductGrid({ category, halalOnly, maxBudget, storeId, search, a
     const requestedPage = previousFilter.current === filterKey ? page : 1
     if (previousFilter.current !== filterKey) { previousFilter.current = filterKey; setPage(1) }
     const selected = { ...attributes, ...(halalOnly ? { halal: ['true'] } : {}) }
-    const params = new URLSearchParams({ store_id: storeId, category, q: debouncedSearch, page: String(requestedPage), page_size: String(pageSize), sort, attributes: JSON.stringify(selected), in_stock: String(inStock) })
+    const params = new URLSearchParams({ store_id: storeId, category, q: debouncedSearch, page: String(requestedPage), page_size: String(pageSize), sort, attributes: JSON.stringify(selected), in_stock: String(inStock), offers_only:String(offersOnly) })
     if (maxBudget > 0) params.set('max_price', String(maxBudget))
     async function load() {
       setLoading(true); setError('')
@@ -55,9 +56,9 @@ export function ProductGrid({ category, halalOnly, maxBudget, storeId, search, a
     }
     void load()
     return () => controller.abort()
-  }, [filterKey, page, category, halalOnly, maxBudget, storeId, debouncedSearch, attributes, inStock, sort, pageSize, onFacets, registerProducts])
+  }, [offersOnly, filterKey, page, category, halalOnly, maxBudget, storeId, debouncedSearch, attributes, inStock, sort, pageSize, onFacets, registerProducts])
 
-  const label = CATEGORY_META.find(c => c.id === category)?.label || 'All groceries'
+  const label = offersOnly ? 'Approved offers' : CATEGORY_META.find(c => c.id === category)?.label || 'All groceries'
   return (
     <section ref={section} className="flex-1 overflow-y-auto bg-slate-50 p-lg" aria-busy={loading}>
       <div className="mb-md flex flex-wrap items-center justify-between gap-3">
@@ -76,7 +77,7 @@ export function ProductGrid({ category, halalOnly, maxBudget, storeId, search, a
       {error && <p role="alert" className="mb-md rounded bg-amber-50 p-md text-amber-800">{error}</p>}
       {loading ? <p role="status" className="py-10 text-slate-500">Loading products…</p> : data?.items.length ? <>
         <div className="grid grid-cols-2 gap-md md:grid-cols-3 xl:grid-cols-4">
-          {data.items.map(product => <ProductCard key={product.product_id} product={product} added={productIds.has(product.product_id)} onAdd={addProduct} />)}
+          {data.items.map(product => <ProductCard key={product.product_id} product={product} quantity={items.find(item=>item.product_id===product.product_id)?.quantity || 0} added={productIds.has(product.product_id)} onAdd={addProduct} />)}
         </div>
         <nav aria-label="Product pagination" className="mt-6 flex flex-wrap items-center justify-center gap-3 pb-5">
           <button className="btn-secondary disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(p => p-1)}>Previous</button>

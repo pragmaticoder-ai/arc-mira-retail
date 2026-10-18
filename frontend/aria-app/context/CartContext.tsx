@@ -13,6 +13,7 @@ import {
   useEffect,
   useState,
 } from 'react'
+import type { DemoCustomer } from '@/lib/customers'
 import type {
   AppliedPromotion,
   Product,
@@ -22,6 +23,7 @@ import type {
 } from '@/lib/types'
 
 interface CartContextValue {
+  customer: DemoCustomer|null
   items: CartItem[]
   catalog: Product[]
   setCatalog: (products: Product[]) => void
@@ -47,6 +49,7 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [customer,setCustomer]=useState<DemoCustomer|null>(null)
   const [catalog, setCatalog] = useState<Product[]>([])
   const [quoteId, setQuoteId] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
@@ -55,17 +58,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [order, setOrderState] = useState<OrderConfirmation | null>(null)
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem('arc-checkout') || 'null')
-      if (Array.isArray(saved?.items)) {
-        setItems(saved.items); setPromotion(saved.promotion || null); setOrderState(saved.order || null); setQuoteId(saved.quoteId || null); setCatalog(Array.isArray(saved.catalog) ? saved.catalog : [])
-      }
-    } catch { /* A corrupt local snapshot starts a fresh basket. */ }
-    setHydrated(true)
-  }, [])
-  useEffect(() => {
-    if (hydrated) sessionStorage.setItem('arc-checkout', JSON.stringify({ items, promotion, order, quoteId, catalog: catalog.filter(p=>items.some(i=>i.product_id===p.product_id)) }))
-  }, [hydrated, items, promotion, order, quoteId, catalog])
+    const controller=new AbortController()
+    fetch('/api/auth/session',{signal:controller.signal,cache:'no-store'}).then(async response=>{
+      if(!response.ok) {setHydrated(true);return}
+      const data=await response.json()
+      if(!data.customer?.customer_id)throw new Error('Unknown customer')
+      setCustomer(data.customer)
+      const key=`arc-checkout-${data.customer.customer_id}`
+      try {
+        const saved=JSON.parse(sessionStorage.getItem(key) || (data.customer.customer_id==='sarah_123'?sessionStorage.getItem('arc-checkout'):null) || 'null')
+        if(Array.isArray(saved?.items)) {
+          setItems(saved.items);setPromotion(saved.promotion || null);setOrderState(saved.order || null)
+          setQuoteId(saved.quoteId || null);setCatalog(Array.isArray(saved.catalog)?saved.catalog:[])
+        }
+      } catch { /* A corrupt snapshot starts a fresh basket for this customer. */ }
+      setHydrated(true)
+    }).catch(()=>{if(!controller.signal.aborted)setHydrated(true)})
+    return()=>controller.abort()
+  },[])
+  useEffect(()=>{
+    if(hydrated && customer)sessionStorage.setItem(`arc-checkout-${customer.customer_id}`,JSON.stringify({items,promotion,order,quoteId,catalog:catalog.filter(p=>items.some(i=>i.product_id===p.product_id))}))
+  },[hydrated,customer,items,promotion,order,quoteId,catalog])
 
   const registerProducts = useCallback((products: Product[]) => {
     setCatalog(previous => {
@@ -146,9 +159,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setPromotion(null)
     setOrderState(null)
     setQuoteId(null)
+    if(customer) {
+      sessionStorage.removeItem(`arc-checkout-${customer.customer_id}`)
+      Object.keys(sessionStorage).filter(key=>key.startsWith(`arc-aria-${customer.customer_id}-`)).forEach(key=>sessionStorage.removeItem(key))
+    }
     sessionStorage.removeItem('arc-checkout')
-    Object.keys(sessionStorage).filter(key=>key.startsWith('arc-aria-')).forEach(key=>sessionStorage.removeItem(key))
-  }, [])
+  }, [customer])
 
   const total_aed = useMemo(
     () => recompute(items, promotion),
@@ -164,6 +180,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value: CartContextValue = {
+    customer,
     items,
     catalog, setCatalog, registerProducts, quoteId,
     total_aed,

@@ -27,6 +27,7 @@ def demand_insights(store_id: str, hours: int = 48) -> list[dict]:
         unique = {s["product_id"]: s for s in row.get("demand_signals", [])}
         for pid, item in unique.items():
             groups.setdefault(pid, []).append({**item, "session_id": row["session_id"],
+                "customer_id": row.get("customer_id"),
                 "timestamp": row["timestamp"], "order_placed": row.get("order_placed", False),
                 "data_origin": row.get("data_origin", "customer_session")})
     output = []
@@ -52,7 +53,7 @@ def demand_insights(store_id: str, hours: int = 48) -> list[dict]:
             {"action": "replenish", "available": counts["unresolved"] >= 3,
              "quantity": max(counts["unresolved"], product["reorder_threshold"]),
              "lead_time_days": schedule.get("lead_time_days") if schedule else None,
-             "reason": "Creates a purchase-order draft for manager review; no stock is added before delivery."},
+             "reason": "Approves a purchase order and simulates delivery into shared inventory for this demo."},
             {"action": "defer", "available": True, "quantity": 0,
              "reason": "Keep collecting evidence without changing inventory."},
         ]
@@ -97,7 +98,10 @@ def decide_demand(proposal_key: str, store_id: str, action: str) -> dict:
             po = db.insert_purchase_order({"product_id": insight["product_id"], "store_id": store_id,
                 "product_name": insight["product_name"], "quantity": choice["quantity"], "urgency": "high",
                 "justification": insight["summary"], "human_approval_required": True})
-            decision.update(po_id=po["po_id"], execution="purchase_order_drafted")
+            if po["status"] == "rejected":
+                raise ValueError("The purchase order was rejected; review a new proposal later")
+            db.decide_purchase_order(po["po_id"], "approved")
+            decision.update(po_id=po["po_id"], execution="demo_inventory_receipt")
         else:
             decision["execution"] = "observation_only"
         return db.save_decision(proposal_key, decision)

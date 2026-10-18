@@ -5,11 +5,14 @@
 // search box, store selector, cart button with live count, avatar.
 
 import Link from 'next/link'
+import { CustomerMenu } from '@/components/CustomerMenu'
 import { MiraLogo } from '@/components/MiraLogo'
 import { useCart } from '@/context/CartContext'
 import type { Store } from '@/lib/types'
 
 interface NavBarProps {
+  offersOnly: boolean
+  onOffers: (value:boolean) => void
   search: string
   onSearch: (value: string) => void
   stores: Store[]
@@ -17,7 +20,7 @@ interface NavBarProps {
   onStoreChange: (storeId: string) => void
 }
 
-export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: NavBarProps) {
+export function NavBar({ offersOnly, onOffers, search, onSearch, stores, storeId, onStoreChange }: NavBarProps) {
   const { itemCount } = useCart()
 
   return (
@@ -28,9 +31,9 @@ export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: Nav
           <a className="font-medium text-white" href="/">
             Grocery
           </a>
-          <a className="hover:text-white" href="/#offers">
+          <button aria-pressed={offersOnly} className={offersOnly?"text-amber-300":"hover:text-white"} onClick={()=>onOffers(!offersOnly)}>
             Offers
-          </a>
+          </button>
           <a className="hover:text-white" href="/orders">
             Orders
           </a>
@@ -72,12 +75,7 @@ export function NavBar({ search, onSearch, stores, storeId, onStoreChange }: Nav
           )}
         </Link>
 
-        <div
-          aria-hidden="true"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-mira-600 text-sm font-medium text-white"
-        >
-          S
-        </div>
+        <CustomerMenu />
       </div>
     </header>
   )

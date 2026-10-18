@@ -1,118 +1,97 @@
-> **Google infrastructure local run:** follow [LOCAL_GOOGLE.md](docs/LOCAL_GOOGLE.md).
-> `scripts/run_local.py` now defaults to Google services. Use `--offline` explicitly
-> for the older SQLite/rules demo described below.
-
 # ARC — Agentic Retail Command
 
-ARC preserves the demand a completed sale can hide. A shopper accepts an
-alternative *for this week*; the original preference stays visible to the store
-manager, who can review evidence, choose an action, and observe later outcomes.
+ARC connects **ARIA**, a grocery shopping assistant, with **PULSE**, a store operations dashboard. Customer preferences and unmet needs remain visible even when a shopper accepts a temporary alternative. A manager reviews the evidence, approves an action, and sees subsequent shopper outcomes.
 
 **Team:** Pragmatic Engineers · **Theme:** Retail & Commerce
 
-## What works in this branch
+## Try the hosted demo
 
-- **ARIA:** stateful shopping, explicit dietary and budget constraints, live local
-  inventory, substitution feedback, reviewed quotes, validated checkout, and
-  idempotent order creation.
-- **PULSE:** customer statements behind unmet demand, separate counts for satisfied
-  alternatives and temporary compromises, comparison of transfer / replenishment /
-  defer options, persistent manager decisions, and subsequent fulfillment counts.
-- **Shared local storage:** SQLite persists operational data and incidents across
-  app processes and restarts. A manager-approved discount changes the shopper's
-  catalog and price. A simulated inventory transfer makes the original product
-  available for the next local shopper.
+No installation or signup is required.
 
-The local orchestration and feedback parser are deterministic rules, **not live
-Gemini execution**. Google SDK/ADK execution, AlloyDB, BigQuery ML, and deployment
-are deferred integrations. `USE_MOCK=false` does not turn them on. The architecture
-and deployment documents distinguish working local behavior from the intended
-cloud system; they do not claim a completed cloud deployment. SQLite is a single-host prototype, not shared storage across
-independently deployed Cloud Run instances.
+| Application | Link | Sign-in |
+|---|---|---|
+| ARIA — customer shopping | [Open ARIA](https://arc-storefront-kif65kxodq-as.a.run.app/login) | Choose a customer below and enter the shared shopper password |
+| PULSE — manager operations | [Open PULSE](https://arc-pulse-dashboard-kif65kxodq-as.a.run.app) | Username: `pulse-manager` · Password: `Mira2026!` |
 
-## Run the complete local prototype
+### Customer accounts
 
-Use Python 3.11+ and Node 18.17+ with npm. From the repository root:
+**Shared ARIA password for all five customers: `Mira2026!`**
+
+| Customer | Username | Household size | Dietary preference | Weekly budget |
+|---|---|---|---|---|
+| Sarah | `mira-demo` | 4 | Halal | AED 300 |
+| Ahmed | `ahmed-demo` | 1 | None | AED 150 |
+| Fatima | `fatima-demo` | 3 | Vegetarian | AED 250 |
+| Kumar | `kumar-demo` | 2 | None | AED 200 |
+| Layla | `layla-demo` | 5 | Halal | AED 400 |
+
+On ARIA's login page, select the customer's name from **Demo customer**, enter the shared password, and click **Sign in**. Sarah corresponds to `mira-demo`; the picker shows names and household preferences rather than requiring you to type usernames.
+
+Each customer has separate conversations, baskets and order history. Open the avatar menu to choose **My orders**, **Switch customer**, or **Sign out**. Switching customer returns you to the login page; that customer's basket and conversation are retained in the same browser session.
+
+For PULSE, enter `pulse-manager` and its password above, select **MIRA Dubai Marina**, and click **Access dashboard**. Use the **PM** avatar or sidebar **Sign out** to end the manager session.
+
+These published credentials are for the fictional hackathon demo only. They are application credentials, not Google Cloud or database credentials. The ignored owner access file is `data/local/cloud/ACCESS.md`; update this section if demo passwords are rotated. Cloud Run scales to zero, so the first visit may take longer.
+
+## Judge walkthrough
+
+1. Sign into ARIA as **Sarah**. Ask: **“Weekly halal groceries, family of 4, AED 300. Include brown rice.”**
+2. Review the actual basket total and any unavailable-product explanation. Brown rice starts unavailable unless a manager has already restocked it. Choose **Temporary compromise** or **Decline** on an offered alternative to record your preference.
+3. Open the cart icon, adjust quantities if needed, click **Review updated basket**, then **Confirm order** after reviewing the quote. Check **My orders** for the confirmed order.
+4. Sign into PULSE for the same store. **Overview** shows request activity, demand outcomes, modeled exposure and recent decisions. **Unmet demand** shows customer evidence and transfer/replenish/defer choices.
+5. Review a stockout alert and click **Approve & restock (demo)**, or approve an available transfer. PO approval simulates receipt once; transfers preserve source safety stock. Discount approval changes the shared catalog price. No supplier is contacted.
+6. Check the success feedback and **Action history** for completed, approved, rejected or monitoring decisions. Rejected actions leave stock and prices unchanged. History remains visible after an alert clears.
+7. In ARIA, request the affected product again, using the same customer or **Switch customer**. The next interaction reads the updated stock or price. Refresh the catalog to see approved offers.
+8. Use PULSE's **Customer activity** page to distinguish shopper sessions, baskets and orders. After-decision outcomes are observations; exposure charts are estimates, not measured recovered revenue. Synthetic seed evidence is labeled.
+
+Catalog search, categories, attribute facets, sorting, pagination, product details, approved Offers, basket navigation and order history are functional. Halal filtering applies to meat; rice and seafood do not require a halal meat label.
+
+See the [demo guide](docs/DEMO.md), [UI verification coverage](docs/UI_QA.md), and [Cloud Run deployment guide](docs/CLOUD_RUN.md).
+
+## Run locally with Google infrastructure
+
+Use Python 3.11+ and Node 18.17+ with npm. Follow [LOCAL_GOOGLE.md](docs/LOCAL_GOOGLE.md) for Google CLI/ADC and environment configuration, then run:
 
 ```bash
 uv sync --group dev
-uv pip install -r frontend/pulse-dashboard/requirements.txt
 npm --prefix frontend/aria-app ci
 .venv/bin/python scripts/run_local.py
 ```
 
-Open the store at **http://localhost:3000** and PULSE at
-**http://localhost:8501**. The launcher starts ARIA at `127.0.0.1:8001`, configures
-both apps to use the same local stores, and shuts down its children on Ctrl+C.
-The store always calls the backend; it never silently substitutes a fake order.
+Open ARIA at **http://localhost:3000** and PULSE at **http://localhost:8501**. The launcher defaults to Google mode: Gemini on Vertex AI, Cloud SQL PostgreSQL operational state, and BigQuery incident evidence. It starts the agent services and stops its child processes on Ctrl+C. Google credentials stay in the backend; the storefront calls its ARIA API proxy.
 
-The launcher uses `data/local/incidents.sqlite` and
-`data/local/operations.sqlite`. To run an independent fresh demo without deleting
-existing data:
+Create missing fictional customer profiles against the configured Google database without overwriting existing profiles:
+
+```bash
+.venv/bin/python scripts/create_demo_customers.py
+```
+
+Hosted demo sign-in is enabled by the deployment's environment settings. Local authentication is optional; the hosted account instructions above describe the deployed applications.
+
+### Explicit offline test mode
+
+To run the older rules/SQLite fixture demo without Google services:
 
 ```bash
 .venv/bin/python scripts/run_local.py --offline --data-dir /tmp/arc-fresh-demo
 ```
 
-If the usual ports are occupied, pass `--web-port 3100 --aria-port 8002
---pulse-port 8502`. Each launcher uses an isolated Next.js build directory.
+Offline mode uses synthetic fixtures and deterministic rules. Its operational and incident SQLite files must be separate, and their paths must match across app processes. This is a single-host test option; the hosted services use Google infrastructure.
 
-For separate terminals, run this common environment block from the repository
-root in **each Python service terminal**:
-
-```bash
-export USE_MOCK=true
-export ENVIRONMENT=development
-export ARC_STATE_DB=/tmp/arc-manual/operations.sqlite
-export ARC_BRIDGE_DB=/tmp/arc-manual/incidents.sqlite
-export PYTHONPATH="$PWD"
-```
-
-Then use the per-service commands in [DEPLOYMENT.md](DEPLOYMENT.md). Set the
-Next.js `ARIA_AGENT_URL` to the ARIA service URL. Use the same absolute paths
-across services, but never use one file for both databases: their transactions
-use separate connections. A root `.env` is not automatically loaded by Python.
-
-## Try the distinguishing workflow
-
-1. Ask ARIA: **“Weekly halal groceries, family of 4, AED 300. Include brown rice.”**
-2. Choose **Temporary compromise** for the proposed alternative. Review and
-   confirm the basket. The order succeeds; the original preference remains unmet.
-3. Open PULSE. Inspect the customer evidence and distinguish your live local
-   session from the labeled synthetic seed sessions.
-4. Compare actions and approve **transfer**. This simulates a stock movement
-   while preserving the source store's safety stock.
-5. Start a new shopper session (Continue shopping after checkout) and request
-   **“Brown rice please, AED 30.”** Confirm it. PULSE shows an observed fulfilled
-   request after the decision. This is descriptive monitoring, not causal proof.
-6. Approve the Laban discount in PULSE. The store catalog refreshes within ten
-   seconds. A new Laban request quotes the approved price.
-
-See [the three-minute demo](docs/DEMO.md), [review fixes and limitations](docs/REVIEW_FIXES.md),
-and [evaluation](docs/EVALUATION.md).
+If usual ports are occupied, add `--web-port 3100 --aria-port 8003 --pulse-port 8502`. See [DEPLOYMENT.md](DEPLOYMENT.md) for additional run commands.
 
 ## Validate
 
 ```bash
 .venv/bin/python -m pytest
-.venv/bin/ruff check agents tools frontend/pulse-dashboard scripts tests
-.venv/bin/mypy agents tools frontend/pulse-dashboard/data_provider.py
-.venv/bin/python -m scripts.evaluate_demand
+npm --prefix frontend/aria-app test
 npm --prefix frontend/aria-app run build
 ```
 
-Tests cover real endpoint-to-storage behavior, separate processes, concurrent
-checkout, rollback, stale quotes, explicit customer evidence, action idempotency,
-and the manager-to-shopper loop. All customer and velocity seed data is synthetic;
-modeled revenue is labeled as an estimate. No retail performance claim is made.
+The current release passed 182 Python tests, 12 frontend tests and the Next.js production build. The hosted smoke test verified form authentication/customer scoping, the 4,145-product catalog, weekly shopping, explicit substitution feedback, checkout/order history/idempotency and Google analysis. Its temporary test records were removed and stock restored.
 
+For a configured deployment, `.venv/bin/python scripts/smoke_cloud.py` runs the hosted smoke test using the ignored local access file. [UI_QA.md](docs/UI_QA.md) describes coverage and the limits of visual/device testing.
 
-## Specifications and implementation status
+## Specifications
 
-[ARC_SPEC.md](ARC_SPEC.md) is the current product specification (1.1).
-[ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md) and
-[AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) describe actual local execution and
-explicit future integration boundaries. [The specification index](specs/README.md)
-links the tool/workflow details and generated OpenAPI snapshots. Operational setup
-is in [DEPLOYMENT.md](DEPLOYMENT.md); contribution checks are in
-[CONTRIBUTING.md](CONTRIBUTING.md). Google-oriented assets remain planned work.
+[ARC_SPEC.md](ARC_SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](DATA_MODEL.md), [AGENT_CONTRACTS.md](AGENT_CONTRACTS.md) and the [specification index](specs/README.md) document the system. For the current hosted setup and demo receipt behavior, use [CLOUD_RUN.md](docs/CLOUD_RUN.md) and [SPEC-PULSE-08](specs/SPEC-PULSE-08-manager_decisions.md). Older local-only descriptions in other documents may predate the Google deployment.

@@ -1,25 +1,11 @@
-# PULSE dashboard
+# PULSE operations dashboard
 
-Run the full shared-state prototype from the repository root:
+Run `.venv/bin/python scripts/run_local.py` from the repository root for local apps using Google infrastructure. PULSE opens at http://localhost:8501. `USE_MOCK=true` is an explicit offline testing option; shared SQLite needs both `ARC_STATE_DB` and `ARC_BRIDGE_DB` paths.
 
-```bash
-.venv/bin/python scripts/run_local.py
-```
+Hosted access uses a branded manager form with a store selector. Credentials are in the ignored `data/local/cloud/ACCESS.md`. Sign out is in the sidebar.
 
-PULSE opens at http://localhost:8501. Both operational and incident database
-paths must match ARIA's environment; the launcher sets them automatically.
-Standalone execution without paths uses isolated process memory and shows a warning.
-The dashboard calls the PULSE tools directly. `PULSE_AGENT_URL` is not used.
+Pages: Overview, Unmet demand, Stockout alerts, Perishables, Customer activity, Action history. Store, period, refresh, drill-in, decisions, and history filters are functional. Overview charts show recorded hourly request activity, product-intent outcomes, and separately labeled modeled exposure. Synthetic evidence remains labeled. Completed-action counts and history cover all persisted store decisions; demand metrics use the selected period.
 
-Store and period selectors are functional. A Streamlit fragment refreshes the data
-without blocking the app. Decisions are persisted before success is displayed;
-failed writes show an error. See [the project README](../../README.md) for the
-workflow and the Google integration boundary.
+Discount approvals change shared prices. Transfers move shared stock above source safety levels. **Approve & restock (demo)** approves a PO and simulates receipt once, atomically; demand replenishment approval performs the same receipt. It contacts no supplier. Rejection leaves prices and inventory unchanged. History retains decisions after active alerts clear; feedback confirms a successful write and failures display an error.
 
-
-The workspace shows explicit unmet-demand evidence, compares transfer/replenish/
-defer options, persists manager decisions, and monitors later product-request
-outcomes. It has no manager-login screen. Financial scenarios and synthetic seeds
-remain labeled. See [SCREENS.md](../mira-brand/SCREENS.md) and
-[SPEC-PULSE-08](../../specs/SPEC-PULSE-08-manager_decisions.md) for the implemented
-approval and observation behavior.
+The dashboard calls shared operational tools directly; `PULSE_AGENT_URL` is used for the optional Google analysis summary, authenticated with its Cloud Run service identity. Shopper activity comes from persisted ARIA sessions; approved changes are visible in subsequent ARIA interactions and newly fetched catalog pages. Existing checkout quotes are revalidated before an order can be placed.

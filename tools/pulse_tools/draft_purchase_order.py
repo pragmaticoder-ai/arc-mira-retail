@@ -84,6 +84,8 @@ def draft_purchase_order(
         "status": po["status"],
         "human_approval_required": True,
         "created_at": po["created_at"],
+        "inventory_received_at": po.get("inventory_received_at"),
+        "execution": po.get("execution"),
     }
     logger.info(
         "draft_purchase_order",

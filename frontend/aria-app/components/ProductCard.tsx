@@ -10,11 +10,12 @@ import type { Product } from '@/lib/types'
 
 interface ProductCardProps {
   product: Product
+  quantity?: number
   added: boolean
   onAdd: (productId: string) => void
 }
 
-export function ProductCard({ product, added, onAdd }: ProductCardProps) {
+export function ProductCard({ product, added, onAdd, quantity=0 }: ProductCardProps) {
   const outOfStock = product.stock_quantity <= 0
   const discounted = product.discount_active && product.discounted_price_aed != null
   const emoji = CATEGORY_META.find((c) => c.id === product.category)?.emoji ?? '🛒'
@@ -70,7 +71,7 @@ export function ProductCard({ product, added, onAdd }: ProductCardProps) {
 
       <button
         type="button"
-        disabled={outOfStock}
+        disabled={outOfStock || quantity>=product.stock_quantity}
         onClick={() => onAdd(product.product_id)}
         className={
           outOfStock
@@ -80,7 +81,7 @@ export function ProductCard({ product, added, onAdd }: ProductCardProps) {
               : 'btn-primary mt-sm w-full'
         }
       >
-        {outOfStock ? 'Unavailable' : added ? 'In basket · add one' : 'Add to cart'}
+        {outOfStock ? 'Unavailable' : quantity>=product.stock_quantity ? 'Maximum in basket' : added ? 'In basket · add one' : 'Add to cart'}
       </button>
     </div>
   )

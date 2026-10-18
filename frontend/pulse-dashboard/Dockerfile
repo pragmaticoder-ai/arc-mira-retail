@@ -10,7 +10,9 @@ COPY pyproject.toml uv.lock* ./
 COPY frontend/pulse-dashboard/requirements.txt ./requirements-dashboard.txt
 
 # Install base dependencies and dashboard dependencies
-RUN uv sync --no-dev || uv sync --no-dev --no-frozen
+COPY tools/ ./tools/
+COPY agents/ ./agents/
+RUN uv sync --frozen --no-dev
 RUN uv pip install -r requirements-dashboard.txt
 
 # Copy application source
@@ -22,4 +24,4 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["uv", "run", "streamlit", "run", "frontend/pulse-dashboard/pulse_dashboard.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD ["/app/.venv/bin/streamlit", "run", "frontend/pulse-dashboard/pulse_dashboard.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true"]

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAriaConfig } from '@/lib/config'
+import { getAriaHeaders } from '@/lib/upstreamAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   try {
     const upstream = await fetch(`${cfg.ariaAgentUrl}/aria/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(cfg.ariaAgentToken ? { Authorization: `Bearer ${cfg.ariaAgentToken}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(await getAriaHeaders()) },
       body: JSON.stringify({ ...body, customer_id: body.customer_id ?? cfg.defaultCustomerId, store_id: body.store_id ?? cfg.defaultStoreId }),
       signal: AbortSignal.timeout(cfg.requestTimeoutMs),
       cache: 'no-store',

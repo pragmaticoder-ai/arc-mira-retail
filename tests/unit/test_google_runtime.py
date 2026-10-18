@@ -227,3 +227,111 @@ def test_invalid_planner_basket_is_corrected_before_state_changes(monkeypatch):
     assert len(seen) == 2
     assert result.json()["cart"]["items"][0]["product_id"] == "milk_almarai_2l"
     assert result.json()["cart"]["total_aed"] <= 300
+
+
+def test_weekly_reply_uses_validated_total_and_does_not_replace_missing_brown_rice(
+    monkeypatch,
+):
+    import agents.aria.main as aria
+    import agents.google_runtime as runtime
+
+    monkeypatch.setattr(aria, "settings", SimpleNamespace(use_mock=False))
+    monkeypatch.setattr(
+        runtime,
+        "plan_shopping",
+        lambda *args: runtime.ShoppingPlan(
+            action="update_cart",
+            reply="Brown rice included. Total AED 299.98.",
+            dietary="halal",
+            budget=300,
+            household=4,
+            items=[
+                runtime.BasketItem(product_id="rice_basmati_5kg", quantity=1),
+                runtime.BasketItem(product_id="milk_almarai_2l", quantity=2),
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        aria,
+        "suggest_substitution",
+        lambda *args: {
+            "substitute_product_id": "rice_basmati_5kg",
+            "name": "India Gate Basmati Rice 5kg",
+        },
+    )
+    result = TestClient(aria.app).post(
+        "/aria/chat",
+        json={
+            "message": "Weekly halal groceries, family of 4, AED 300. Include brown rice."
+        },
+    )
+    assert result.status_code == 200
+    data = result.json()
+    assert [i["product_id"] for i in data["cart"]["items"]] == ["milk_almarai_2l"]
+    assert "Brown Rice 500g is unavailable" in data["reply"]
+    assert "299.98" not in data["reply"]
+    assert f"AED {data['cart']['total_aed']:.2f}" in data["reply"]
+    assert data["substitution_offers"][0]["product_id"] == "rice_brown_500g"
+
+
+def test_explicit_weekly_request_requires_nonempty_update_even_if_requested_item_is_unavailable(
+    monkeypatch,
+):
+    import json
+
+    import agents.google_runtime as runtime
+
+    captured = []
+
+    async def invoke(name, prompt, payload, schema):
+        captured.append((payload, schema))
+        return json.dumps(
+            {
+                "action": "update_cart",
+                "reply": "Basket ready",
+                "dietary": "halal",
+                "budget": 300,
+                "household": 4,
+                "items": [{"product_id": "milk", "quantity": 2}],
+                "requested_ids": ["brown"],
+            }
+        )
+
+    monkeypatch.setattr(runtime, "invoke", invoke)
+    inventory = [
+        {
+            "product_id": "brown",
+            "product_name": "Brown Rice 500g",
+            "category": "grains",
+            "price_aed": 9.5,
+            "stock_quantity": 0,
+            "dietary_flags": "",
+        },
+        {
+            "product_id": "milk",
+            "product_name": "Milk 2L",
+            "category": "dairy",
+            "price_aed": 12,
+            "stock_quantity": 20,
+            "dietary_flags": "",
+        },
+    ]
+    runtime.plan_shopping(
+        "Weekly halal groceries, family of 4, AED 300. Include brown rice.",
+        {},
+        inventory,
+    )
+    payload, schema = captured[-1]
+    assert payload["required_action"] == "update_cart"
+    assert schema is runtime.WeeklyShoppingPlan
+    with pytest.raises(ValueError):
+        schema(
+            action="clarify",
+            reply="Ask?",
+            dietary="halal",
+            budget=300,
+            household=4,
+            items=[],
+        )
+    runtime.plan_shopping("What should weekly groceries include?", {}, inventory)
+    assert captured[-1][1] is runtime.ShoppingPlan

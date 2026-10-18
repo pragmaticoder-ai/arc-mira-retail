@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAriaConfig } from '@/lib/config'
+import { getAriaHeaders } from '@/lib/upstreamAuth'
 
 export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
   try {
     const response=await fetch(`${cfg.ariaAgentUrl}/aria/orders?${params}`,{
       cache:'no-store',signal:AbortSignal.timeout(cfg.requestTimeoutMs),
-      headers:cfg.ariaAgentToken?{Authorization:`Bearer ${cfg.ariaAgentToken}`}:{},
+      headers:await getAriaHeaders(),
     })
     const body=await response.json()
     return NextResponse.json(response.ok?body:{error_message:typeof body.detail==='string'?body.detail:'Unable to load orders'},{status:response.status})

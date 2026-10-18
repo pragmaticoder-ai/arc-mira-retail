@@ -1,6 +1,7 @@
 """PULSE: evidence, manager decisions, and observed demand outcomes."""
 from __future__ import annotations
 
+import hmac
 import os
 
 import data_provider as data
@@ -9,6 +10,30 @@ import streamlit as st
 from tools.shared.clock import now
 
 st.set_page_config(page_title="PULSE — Unmet Demand", page_icon="📊", layout="wide")
+# Stop before any operational data is loaded or manager actions are rendered.
+if os.getenv("K_SERVICE") or os.getenv("DEMO_PASSWORD"):
+    expected_user=os.getenv("DEMO_USERNAME", "")
+    expected_password=os.getenv("DEMO_PASSWORD", "")
+    if not expected_user or not expected_password:
+        st.error("Manager access is not configured.")
+        st.stop()
+    if not st.session_state.get("manager_authenticated"):
+        st.title("PULSE manager sign in")
+        with st.form("manager_login"):
+            username=st.text_input("Username")
+            password=st.text_input("Password",type="password")
+            submit=st.form_submit_button("Sign in",type="primary")
+        if submit:
+            if hmac.compare_digest(username,expected_user) and hmac.compare_digest(password,expected_password):
+                st.session_state["manager_authenticated"]=True
+                st.rerun()
+            else:
+                st.error("Incorrect username or password.")
+        st.stop()
+    if st.sidebar.button("Sign out"):
+        st.session_state.clear()
+        st.rerun()
+
 STORES = {"dubai_marina_01": "MIRA Dubai Marina", "jbr_01": "MIRA JBR", "al_barsha_01": "MIRA Al Barsha"}
 REFRESH_SECONDS = int(os.getenv("PULSE_REFRESH_SECONDS", "10"))
 

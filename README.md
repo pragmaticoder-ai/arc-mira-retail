@@ -1,5 +1,9 @@
 # ARC — Agentic Retail Command
 
+**[▶ Watch the 3:24 live demo — substitution → manager-approved PO → original item back in stock](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4)**
+
+[Recording details and repository video copy](presentation/README.md)
+
 ARC connects **ARIA**, a grocery shopping assistant, with **PULSE**, a store operations dashboard. Customer preferences and unmet needs remain visible even when a shopper accepts a temporary alternative. A manager reviews the evidence, approves an action, and sees subsequent shopper outcomes.
 
 **Team:** Pragmatic Engineers · **Theme:** Retail & Commerce
@@ -98,6 +102,6 @@ For a configured deployment, `.venv/bin/python scripts/smoke_cloud.py` runs the 
 
 ## Submission demo video
 
-**[Watch the 3:18 AI-narrated demo and view presentation materials](https://github.com/pragmaticoder-ai/arc-mira-retail/tree/main/presentation)**
+**[Watch the 3:24 AI-narrated demo and view presentation materials](https://github.com/pragmaticoder-ai/arc-mira-retail/tree/main/presentation)**
 
 [Direct video playback](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4).

@@ -1,14 +1,26 @@
 # ARC — Agentic Retail Command
 
-## Demo video · 3 minutes 18 seconds
+## Live demo video · 3 minutes 24 seconds
 
-**[▶ Watch the AI-narrated closed-loop demo](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4)**
+**[▶ Watch the recorded live demonstration](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4)**
 
-[Download the video from this repository](./ARC_Demo.mp4)
+[Download the same video from this repository](./ARC_Demo.mp4)
 
-The edited walkthrough combines deployed prototype screenshots, architecture diagrams, and verified live transaction results. It explains ARIA shopping, PULSE manager approvals, and how updated inventory and prices reach the next customer.
+The video records actual interactions with the deployed ARIA and PULSE applications, with natural synthetic narration synchronized to each step. Browser windows are preserved in full; waits are edited.
 
-Verified demo transactions: Customer 1 order `MR-2026-1734`; 12 units of brown rice received through the demo approval flow; Laban discounted from AED 8.00 to AED 4.80; Customer 2 order `MR-2026-1E92` containing brown rice and Laban. Restocking simulates receipt; no supplier is contacted.
+### Core impact — shown first
+
+1. Ahmed requests the unavailable Safa Laban original multipack in a weekly basket.
+2. He selects **Temporary compromise** and checks out; his original preference remains visible in PULSE.
+3. The manager reviews five scripted demo request sessions and approves **PO-2026-0002**, receiving **10 units** through the labeled demo receipt flow.
+4. Sarah signs in separately. The original product now enters her cart; its product page shows **10 in stock**.
+5. Sarah purchases the original item: **MR-2026-14C0**, **AED 9.95**. The order persists in her history.
+
+### Additional example — approved prices reach the next customer
+
+Sarah’s milk-and-chicken order **MR-2026-460C** totals **AED 34.00**. The manager approves a 25% chicken discount. Ahmed’s new order **MR-2026-0941** totals **AED 28.50**, with chicken at **AED 16.50**.
+
+These are demo customer accounts and real shared Google-backed application state. PO approval simulates inventory receipt and contacts no supplier. The observed purchases do not establish causal revenue uplift.
 
 ## Try the applications
 

@@ -1,94 +1,55 @@
 # Three-minute ARC demonstration
 
-Demo usernames, shared passwords and sign-in instructions: [README — Try the hosted demo](../README.md#try-the-hosted-demo).
+Demo URLs, usernames and passwords: [README — Try the hosted demo](../README.md#try-the-hosted-demo).
 
-Updated October 18, 2026 · Matches product specification 1.1.
-
-For the Google-backed local setup, see [LOCAL_GOOGLE.md](LOCAL_GOOGLE.md).
-The recording sequence below is the explicit offline fixture scenario.
+This script describes the deployed Google-backed demo. ARIA uses Gemini on Vertex AI through Google ADK. Cloud SQL PostgreSQL stores operational state, and BigQuery holds session demand evidence. MIRA Retail is fictional. Purchase-order receipt and store transfers simulate operational execution within the shared demo inventory.
 
 ## Preparation
 
-From the repository root, start a fresh independent scenario:
-
-```bash
-.venv/bin/python scripts/run_local.py --offline --data-dir /tmp/arc-recording-01
-```
-
-Choose another unused directory for a second take; reusing one retains prior
-orders, stock, discounts and approvals. If the usual ports are occupied, add
-`--web-port 3100 --aria-port 8101 --pulse-api-port 8102 --pulse-port 8502` and open those URLs.
-Do not stop another running demo to free its ports.
-
-Open the store and manager dashboard. Explain upfront that this branch runs
-local deterministic orchestration and simulated inventory actions; Google model
-and cloud SDK execution are the remaining integration work. The seeded customer
-history is synthetic. Do not present the demo login as production authentication.
+- Open both hosted apps before recording so cold starts do not consume video time.
+- Sign into ARIA as Sarah and PULSE as the manager. Select MIRA Dubai Marina in both.
+- Inspect current stock and pending actions before recording. Previous approvals persist. Use an actually unavailable product and a valid pending proposal rather than claiming brown rice is unavailable if someone already restocked it.
+- Keep the source product name, shopper statement and action result visible. Show the outcome in Action history after clicking approval.
 
 ## Recording sequence
 
 | Time | Show | Explain |
 |---|---|---|
-| 0:00–0:20 | ARIA and the store | “Sales record what customers bought. ARC preserves what they wanted but couldn't get.” |
-| 0:20–0:55 | Request weekly halal groceries with brown rice; choose Temporary compromise; confirm | “A successful checkout can still contain an unresolved customer need.” |
-| 0:55–1:35 | PULSE counts and the actual customer statement | Distinguish satisfied alternatives, compromises, rejections, unknown feedback, and labeled synthetic seeds. |
-| 1:35–2:05 | Compare transfer, replenishment and defer; approve transfer | Show quantity and source safety stock. State clearly that the transfer is a local simulation. |
-| 2:05–2:35 | New shopper requests and buys brown rice | Show that persisted inventory changed; the after-action monitor counts a fulfilled request. |
-| 2:35–2:50 | Approve Laban discount; refresh storefront | The manager's decision controls the shopper's actual local price. |
-| 2:50–3:00 | Evaluation and integration boundary | Curated synthetic examples demonstrate the distinction; they are not a production accuracy benchmark. |
+| 0:00–0:20 | ARIA storefront and catalog | “Sales tell a retailer what sold. ARC also records what the customer wanted but could not get.” |
+| 0:20–0:55 | Ask for weekly halal groceries for four under AED 300, including brown rice | Show the real basket total and unavailable-product response. Explain that Gemini proposes while the server validates price, stock, diet and budget. |
+| 0:55–1:15 | Choose Temporary compromise on an actual offer, then review and explicitly confirm checkout | “Accepting an alternative this week does not mean the original preference disappeared.” Open My orders to show the confirmed order. |
+| 1:15–1:50 | PULSE Unmet demand and customer evidence | Show the shopper's exact statement. Distinguish satisfied alternatives, temporary compromises and rejection. Identify synthetic seed evidence wherever shown. |
+| 1:50–2:15 | Review and approve an available transfer, or Approve & restock (demo) | Show quantity, approval feedback and the persisted result in Action history. Explain that stock receipt is a demo simulation and contacts no supplier. |
+| 2:15–2:40 | Switch customer or start a fresh shopping session and request the original product | Show that the next interaction reads updated shared stock. A confirmed order containing the original product supplies the fulfillment signal. |
+| 2:40–2:50 | PULSE overview and Action history | Show charts and the completed action. A perishable discount, when available and approved, changes the next shopper quote too. |
+| 2:50–3:00 | Verification and closing | “ARC preserves the unmet need, supports a reviewed decision, and makes the next shopping interaction reflect it.” State that financial exposure and later outcomes are estimates and observations. |
 
-## Evidence to verify during the take
+If the current catalog does not support a suitable substitution, show the explicit rejection/unmet request honestly. Do not fabricate an accepted alternative or repeat an already completed action as if it were pending.
 
-- The unavailable product was explicitly requested; the session is logged once
-  and updated as feedback and checkout arrive.
-- The temporary compromise remains visible even after the order succeeds.
-- The manager sees your session statement alongside labeled synthetic seeds.
-- The transfer changes actual shared local inventory without crossing source
-  safety stock. It is not a shipment or supplier delivery.
-- A **new** shopper session buys the original product. The monitor counts an
-  observed post-decision fulfillment; it does not claim causality.
-- Pending discounts are inactive. After approval, the catalog refreshes within
-  ten seconds and a new request uses the canonical approved price.
-- No fake order or logging fallback masks a stopped backend. A missing/stale quote
-  asks for another review instead of ordering an unexpected basket.
+## What demonstrates impact
 
-## Optional checks and claims
+- A checkout can succeed while the original preference remains unresolved and visible to the manager.
+- The manager sees customer evidence rather than treating every accepted alternative as satisfaction.
+- Approvals change shared stock or prices. Rejections leave them unchanged. Repeated PO approvals do not duplicate inventory.
+- A subsequent shopper can buy the newly available original item. PULSE retains the action and observes recorded outcomes after it.
+- Individual customer profiles keep conversations, baskets and orders separate.
 
-Optional unscripted check: request vegan groceries under AED 20 and inspect the
-actual basket. Cancel with “yes but cancel the order” to demonstrate that prefix
-matching cannot accidentally place an order.
+The observed hosted smoke test produced 20 basket lines totaling AED 127.62 for one family-of-four request under AED 300 and disclosed unavailable brown rice. This is one recorded result, not a promise of the same basket after stock or prices change, and not a complete nutrition plan.
 
-Do not claim causal revenue recovery, first-of-its-kind technology, an executed
-supplier order, or live Gemini reasoning in this branch.
+## Evidence and boundaries
 
-The evaluation comparison is **20/20 local rule matches versus 10/20 for the
-acceptance-only baseline** on twenty curated synthetic development examples,
-including five compromise cases. It is not a held-out or representative benchmark.
-See [EVALUATION.md](EVALUATION.md) before presenting those numbers.
+182 Python tests, 12 frontend tests and the Next.js production build passed. Hosted smoke checks covered authentication, customer scoping, the 4,145-product Marina catalog, substitution feedback, checkout, order history, idempotency and Google analysis. See [UI_QA.md](UI_QA.md).
 
-Product behavior: [ARC_SPEC.md](../ARC_SPEC.md). Interfaces:
-[AGENT_CONTRACTS.md](../AGENT_CONTRACTS.md). Full setup:
-[DEPLOYMENT.md](../DEPLOYMENT.md).
+On 20 curated synthetic development examples, the feedback rule parser matched 20/20 labels versus 10/20 for a simple acceptance-only baseline, including all five compromise cases. This illustrates the feedback distinction. It is not a held-out Gemini accuracy benchmark or representative customer study. See [EVALUATION.md](EVALUATION.md).
 
-## Shopping navigation checks
+Supplier integration, production identity and reliable event delivery remain future work. Do not claim actual supplier delivery, measured revenue recovery, causal uplift, production-scale throughput or universal novelty.
 
-- Ask: `Weekly halal groceries, family of 4, AED 300. Include brown rice.`
-  Check that the proposed basket includes stocked brown rice and stays within
-  AED 300. Seafood does not require a halal slaughter label.
-- Open the cart icon to review `/cart`. Change a quantity or remove an item;
-  review the updated quote before confirming.
-- After confirming, choose **View my orders**, or use **Orders** in the navigation.
-  The order should remain visible after refreshing `/orders`.
 
-## Manager-to-shopper loop and customer switching
+Demo video (3 minutes 24 seconds, AI narration): [Watch the closed-loop walkthrough](https://storage.googleapis.com/aria-mira-retail-demo-video-20261018/ARC_Demo.mp4).
 
-Use the avatar menu to switch between Sarah, Ahmed, Fatima, Kumar and Layla; all use the shared ARIA demo password in `data/local/cloud/ACCESS.md`. PULSE → Customer activity separates their sessions, baskets and orders.
 
-1. Ask ARIA for an unavailable product and record the unmet need.
-2. In PULSE choose the same store. Review demand evidence or a stockout alert.
-3. Approve a transfer, or use **Approve & restock (demo)** to simulate PO receipt. Demand replenishment approval also simulates receipt. No supplier is contacted. Repeated approval never duplicates stock.
-4. Watch the success feedback and open **Action history**: product, timestamp, Completed/Rejected/Monitoring, and result remain visible after alerts clear.
-5. Ask the same customer again, or switch customer and request that item. ARIA reads the updated stock. Discount approval similarly changes the next quote and catalog price. A rejection changes neither stock nor price.
-6. Confirm the order explicitly and check **My orders**. PULSE's after-decision evidence is observational; financial exposure charts are estimates, not recovered revenue.
+## Recorded hosted demonstration
 
-Overview charts use actual recorded request sessions, product intent outcomes and separately labeled exposure estimates. Completed action/history totals cover persisted store history; demand metrics use the selected period.
+The replacement video is 3:24 and leads with the real Safa Laban stockout → temporary compromise → PO approval → original-product purchase loop. Five scripted demo request sessions provide the stockout threshold; their evidence is generated through the live assistant. PO-2026-0002 receives 10 units. Sarah’s subsequent order MR-2026-14C0 purchases the original multipack for AED 9.95.
+
+The additional price example shows Sarah’s order MR-2026-460C at AED 34.00, the manager’s 25% chicken discount, and Ahmed’s order MR-2026-0941 at AED 28.50. Footage contains full application windows, edited waits, and synchronized synthetic narration. The submitted public URL is unchanged.

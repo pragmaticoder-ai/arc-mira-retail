@@ -22,4 +22,4 @@ EXPOSE 8080
 ARG AGENT_TYPE=aria
 ENV AGENT_TYPE=$AGENT_TYPE
 
-CMD ["sh", "-c", "uv run uvicorn tools.${AGENT_TYPE}_tools.main:app --host 0.0.0.0 --port 8080"]
+CMD ["sh", "-c", "uv run uvicorn tools.${AGENT_TYPE}_tools.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

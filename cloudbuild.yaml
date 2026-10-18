@@ -1,0 +1,86 @@
+steps:
+  # ── 1. Build ARIA Agent Container ──────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/aria-agent:latest'
+      - '-f'
+      - 'agents/aria/Dockerfile'
+      - '.'
+    id: 'build-aria-agent'
+
+  # ── 2. Build PULSE Agent Container ─────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/pulse-agent:latest'
+      - '-f'
+      - 'agents/pulse/Dockerfile'
+      - '.'
+    id: 'build-pulse-agent'
+
+  # ── 3. Build Storefront Container (Next.js) ────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/storefront:latest'
+      - '-f'
+      - 'frontend/aria-app/Dockerfile'
+      - 'frontend/aria-app'
+    id: 'build-storefront'
+
+  # ── 4. Build PULSE Dashboard Container (Streamlit) ─────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/pulse-dashboard:latest'
+      - '-f'
+      - 'frontend/pulse-dashboard/Dockerfile'
+      - '.'
+    id: 'build-pulse-dashboard'
+
+  # ── 5. Push All Images to Artifact Registry ────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/aria-agent'
+    id: 'push-aria-agent'
+    waitFor: ['build-aria-agent']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/pulse-agent'
+    id: 'push-pulse-agent'
+    waitFor: ['build-pulse-agent']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/storefront'
+    id: 'push-storefront'
+    waitFor: ['build-storefront']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/arc-docker-repo/pulse-dashboard'
+    id: 'push-pulse-dashboard'
+    waitFor: ['build-pulse-dashboard']
+
+substitutions:
+  _REGION: 'asia-southeast1'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1800s'

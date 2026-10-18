@@ -34,8 +34,16 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
-# Docker
-.dockerignore
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+
+# Local databases
 data/arc_bridge.db
 data/arc_bridge.db-wal
 data/arc_bridge.db-shm

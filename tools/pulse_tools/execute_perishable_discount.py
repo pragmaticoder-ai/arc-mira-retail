@@ -72,7 +72,8 @@ def execute_perishable_discount(store_id: str) -> dict:
 
         units_at_risk = stock - projected
         price = float(p["price_aed"])
-        discount_pct = _TIERS[dte]
+        decision = db.get_decision(f"discount:{store_id}:{p['product_id']}:{p['expiry_date']}")
+        discount_pct = decision["discount_pct"] if decision and decision["status"] == "approved" else _TIERS[dte]
         discounted_price = round(price * (1 - discount_pct / 100.0), 2)
         revenue_at_risk = round(units_at_risk * price, 2)
         expected_additional = units_at_risk * _CONVERSION
@@ -98,7 +99,7 @@ def execute_perishable_discount(store_id: str) -> dict:
                     "expiry_source": "AlloyDB inventory.expiry_date",
                     "trigger_formula": f"{dte} × {rate} = {projected} < {stock} units in stock",
                 },
-                "status": (db.get_decision(f"discount:{store_id}:{p['product_id']}:{p['expiry_date']}") or {}).get("status", "pending"),
+                "status": (decision or {}).get("status", "pending"),
                 "human_approval_required": True,
             }
         )

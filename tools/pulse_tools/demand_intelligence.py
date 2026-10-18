@@ -112,6 +112,16 @@ def decide_discount(product_id: str, store_id: str, status: str) -> dict:
         raise ValueError("Invalid discount decision")
     db = get_alloydb()
     with db.transaction():
+        product = db.get_product_at_store(product_id, store_id)
+        if product and product.get("expiry_date"):
+            key = f"discount:{store_id}:{product_id}:{product['expiry_date']}"
+            existing = db.get_decision(key)
+            if existing:
+                if existing["status"] != status:
+                    raise ValueError("This proposal already has a decision")
+                # A retry acknowledges the approved batch; it must not silently
+                # authorize a larger tier as expiry approaches.
+                return existing
         proposal = next((p for p in execute_perishable_discount(store_id)["perishable_alerts"]
                          if p["product_id"] == product_id), None)
         if proposal is None:

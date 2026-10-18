@@ -62,8 +62,9 @@ category, brand, base price, comma-separated dietary flags, aisle, stock quantit
 reorder threshold, supplier, perishability, optional expiry date and discount fields.
 The effective price uses `discounted_price_aed` only when `discount_active` is true.
 
-Discount approval is store-specific and recalculates the discounted price from
-the approved percentage. Transfer preserves the source's reorder threshold and
+Initial discount approval is store-specific and calculates the discounted price
+from the approved percentage. Repeating the decision preserves that percentage;
+a shrinking expiry window does not silently authorize a higher tier. Transfer preserves the source's reorder threshold and
 increments the destination in the same transaction. Checkout consolidates duplicate
 product lines before checking and decrementing stock.
 

@@ -22,11 +22,14 @@ adapter directly; no separate PO-decision HTTP route is implemented.
 ## 3. Decision lifetimes
 
 - Demand: one store/product/business-day proposal. Same action returns the existing
-  decision; a conflicting action or invalid/expired proposal is rejected.
+  decision, including a historical retry after its day has passed. A conflicting
+  action or an invalid/expired undecided proposal is rejected.
 - PO: pending, approved or rejected proposal reused for the same product/store
   within 24 hours. Creation context and actual stored status survive reruns.
 - Discount: store/product/expiry batch. Repeating the same status is idempotent;
-  changing a decided batch to the opposite status is rejected.
+  changing a decided batch to the opposite status is rejected. An identical retry
+  returns the recorded decision even after the original proposal window closes;
+  it does not apply a larger tier as expiry approaches.
 
 ## 4. Write behavior
 

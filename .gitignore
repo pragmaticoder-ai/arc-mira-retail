@@ -39,3 +39,12 @@ htmlcov/
 data/arc_bridge.db
 data/arc_bridge.db-wal
 data/arc_bridge.db-shm
+
+# Local shared prototype state and frontend build output
+data/local/
+*.sqlite-wal
+*.sqlite-shm
+frontend/aria-app/.next*/
+frontend/aria-app/node_modules/
+frontend/aria-app/.tsconfig-local-*.json
+data/arc_bridge.db.state*

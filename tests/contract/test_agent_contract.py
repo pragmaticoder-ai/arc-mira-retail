@@ -39,13 +39,12 @@ def test_aria_chat_contract_shape():
 
 def test_aria_chat_confirm_places_order():
     client = TestClient(aria_app)
-    r = client.post(
-        "/aria/chat",
-        json={"session_id": "contract_confirm", "customer_id": "sarah_123", "store_id": "dubai_marina_01", "message": "confirm"},
-    )
+    draft = client.post("/aria/chat", json={"message": "weekly halal groceries"}).json()
+    r = client.post("/aria/chat", json={"session_id": draft["session_id"],
+                    "message": "confirm", "quote_id": draft["quote_id"]})
+    assert r.status_code == 200
     d = r.json()
-    assert d["order"] is not None
-    assert d["order"]["order_id"]
+    assert d["order"]["status"] == "confirmed"
     assert d["session_logged"] is True
 
 

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.alloydb_client import get_alloydb
+from tools.shared.clock import today
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
 from tools.shared.rate_limit import limiter
@@ -33,8 +34,6 @@ def _discount_for(promo: dict, cart_total_aed: float) -> float:
 
 
 _VALID_DIET = {"halal", "vegetarian", "vegan", "none"}
-# Reference "today" for deterministic validity checks in mock mode.
-_TODAY = date(2026, 10, 17)
 # Session-scoped idempotency: promotions already applied this session.
 _applied_this_session: set[tuple[str, str]] = set()
 
@@ -44,9 +43,9 @@ def _is_valid_now(promo: dict) -> bool:
         return False
     vf, vu = promo.get("valid_from"), promo.get("valid_until")
     try:
-        if vf and date.fromisoformat(vf) > _TODAY:
+        if vf and date.fromisoformat(vf) > today():
             return False
-        if vu and date.fromisoformat(vu) < _TODAY:
+        if vu and date.fromisoformat(vu) < today():
             return False
     except ValueError:
         return False
@@ -62,6 +61,7 @@ def apply_promotion(
     dietary_preference: str,
     store_id: str,
     session_id: str | None = None,
+    *, promotion_id: str | None = None, record_usage: bool = False,
 ) -> dict:
     """
     Checks the promotions table for applicable active promotions. Applies the
@@ -88,6 +88,8 @@ def apply_promotion(
     best = None
     best_discount = 0.0
     for promo in promos:
+        if promotion_id and promo["promotion_id"] != promotion_id:
+            continue
         if not _is_valid_now(promo):  # expiry + max_uses + active
             continue
         if cart_total_aed < float(promo.get("min_cart_aed", 0)):
@@ -98,7 +100,10 @@ def apply_promotion(
         cat = promo.get("category")
         if cat and cat != "all" and cat not in cats_in_cart:
             continue
-        discount = _discount_for(promo, cart_total_aed)
+        eligible_total = sum(i["price_aed"] * i["quantity"] for i in cart
+                             if not cat or cat == "all" or
+                             (db.get_product_at_store(i["product_id"], store_id) or {}).get("category") == cat)
+        discount = _discount_for(promo, eligible_total)
         if discount > best_discount:
             best, best_discount = promo, discount
 
@@ -120,7 +125,7 @@ def apply_promotion(
     # Idempotency: applying the same promotion twice in a session is a no-op
     # on the usage counter (SPEC-ARIA-07 §9).
     key = (session_id or "", best["promotion_id"])
-    if session_id is None or key not in _applied_this_session:
+    if record_usage and (session_id is None or key not in _applied_this_session):
         db.increment_promotion_usage(best["promotion_id"])
         if session_id is not None:
             _applied_this_session.add(key)

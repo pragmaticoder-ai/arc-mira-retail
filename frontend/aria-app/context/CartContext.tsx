@@ -10,18 +10,22 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useEffect,
   useState,
 } from 'react'
 import type {
   AppliedPromotion,
+  Product,
   CartItem,
   CartState,
   OrderConfirmation,
 } from '@/lib/types'
-import { getProductById } from '@/lib/mockProducts'
 
 interface CartContextValue {
   items: CartItem[]
+  catalog: Product[]
+  setCatalog: (products: Product[]) => void
+  quoteId: string | null
   total_aed: number
   promotion: AppliedPromotion | null
   order: OrderConfirmation | null
@@ -40,14 +44,30 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [catalog, setCatalog] = useState<Product[]>([])
+  const [quoteId, setQuoteId] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState(false)
   const [items, setItems] = useState<CartItem[]>([])
   const [promotion, setPromotion] = useState<AppliedPromotion | null>(null)
   const [order, setOrderState] = useState<OrderConfirmation | null>(null)
 
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('arc-checkout') || 'null')
+      if (saved?.order && Array.isArray(saved.items)) {
+        setItems(saved.items); setPromotion(saved.promotion); setOrderState(saved.order)
+      }
+    } catch { /* A corrupt local snapshot starts a fresh basket. */ }
+    setHydrated(true)
+  }, [])
+  useEffect(() => {
+    if (hydrated) sessionStorage.setItem('arc-checkout', JSON.stringify({ items, promotion, order }))
+  }, [hydrated, items, promotion, order])
+
   const recompute = useCallback(
     (next: CartItem[], promo: AppliedPromotion | null) => {
       const subtotal = next.reduce((s, i) => s + i.price_aed * i.quantity, 0)
-      return promo ? promo.new_total_aed : +subtotal.toFixed(2)
+      return +Math.max(0, subtotal - (promo?.discount_aed ?? 0)).toFixed(2)
     },
     [],
   )
@@ -55,14 +75,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const setCart = useCallback((cart: CartState) => {
     setItems(cart.items)
     setPromotion(cart.promotion)
+    setQuoteId(cart.quote_id ?? null)
   }, [])
 
   const addProduct = useCallback((productId: string, quantity = 1) => {
-    const p = getProductById(productId)
-    if (!p) return
+    const p = catalog.find((product) => product.product_id === productId)
+    if (!p || quantity <= 0 || p.stock_quantity < quantity) return
+    setPromotion(null)
+    setQuoteId(null)
     setItems((prev) => {
       const existing = prev.find((i) => i.product_id === productId)
       if (existing) {
+        if (existing.quantity + quantity > p.stock_quantity) return prev
         return prev.map((i) =>
           i.product_id === productId
             ? { ...i, quantity: i.quantity + quantity }
@@ -85,9 +109,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, item]
     })
-  }, [])
+  }, [catalog])
 
   const removeProduct = useCallback((productId: string) => {
+    setPromotion(null)
+    setQuoteId(null)
     setItems((prev) => prev.filter((i) => i.product_id !== productId))
   }, [])
 
@@ -99,6 +125,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems([])
     setPromotion(null)
     setOrderState(null)
+    setQuoteId(null)
+    sessionStorage.removeItem('arc-checkout')
   }, [])
 
   const total_aed = useMemo(
@@ -116,6 +144,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const value: CartContextValue = {
     items,
+    catalog, setCatalog, quoteId,
     total_aed,
     promotion,
     order,

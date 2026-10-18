@@ -1,4 +1,4 @@
-"""BigQuery adapter (the ARIA->PULSE bridge) — placeholder with mock impl.
+"""Incident bridge with memory and durable SQLite implementations.
 
 Bridge tables: incidents (ARIA writes, PULSE reads), inventory_log,
 promotion_log. Also the demand_forecast ARIMA_PLUS model used by
@@ -13,17 +13,23 @@ a canned prediction in mock mode (real impl TODO calls BigQuery ML).
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 import uuid
 from abc import ABC, abstractmethod
 from collections import Counter
 from datetime import datetime, timedelta
+from pathlib import Path
 
+from tools.shared.clock import now, today
 from tools.shared.settings import settings
 
 
 class BigQueryClient(ABC):
+    def list_incidents(self, store_id: str) -> list[dict]:
+        raise NotImplementedError
+
     @abstractmethod
     def insert_incident(self, incident: dict) -> dict:
         """ARIA log_session write to arc_dataset.incidents (idempotent on session_id)."""
@@ -61,29 +67,21 @@ class MockBigQueryClient(BigQueryClient):
 
     def insert_incident(self, incident: dict) -> dict:
         sid = incident.get("session_id") or str(uuid.uuid4())
-        record = {**incident, "session_id": sid}
+        previous = self._incidents.get(sid, {})
+        record = {**incident, "session_id": sid, "timestamp": previous.get("timestamp", incident.get("timestamp", now().isoformat()))}
         self._incidents[sid] = record  # idempotent on session_id
-        return {"session_id": sid, "logged": True, "timestamp": datetime.now().isoformat()}
+        return {"session_id": sid, "logged": True, "timestamp": now().isoformat()}
 
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
         return _aggregate_patterns(
             list(self._incidents.values()), store_id=store_id, hours=hours, min_incidents=min_incidents
         )
 
+    def list_incidents(self, store_id: str) -> list[dict]:
+        return [r for r in self._incidents.values() if r.get("store_id") == store_id]
+
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
-        # ARIMA_PLUS cannot be emulated locally — return a canned forecast.
-        return {
-            "predicted_stockout_date": "2026-10-20",
-            "days_until_stockout": 3,
-            "confidence": 0.82,
-            "current_stock": 0,
-            "daily_consumption_rate": 4.5,
-            "evidence": {
-                "model": "BigQuery ML ARIMA_PLUS (mock)",
-                "training_period": "Oct 1–17 2026",
-                "data_points_used": 17,
-            },
-        }
+        return _local_forecast(product_id, store_id, forecast_days)
 
     def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
         # Mock velocities keyed to the demo. Laban sells ~8.5/day (drives the
@@ -105,7 +103,7 @@ class MockBigQueryClient(BigQueryClient):
 
 # ── Shared aggregation used by both mock + sqlite (identical semantics) ──
 def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
-    cutoff = datetime(2026, 10, 17, 11, 0, 0) - timedelta(hours=hours)
+    cutoff = now() - timedelta(hours=hours)
     agg: dict[str, dict] = {}
     for inc in incidents:
         if inc.get("store_id") != store_id:
@@ -114,12 +112,16 @@ def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min
             ts = datetime.fromisoformat(inc["timestamp"])
         except (KeyError, ValueError):
             continue
-        if ts < cutoff:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=now().tzinfo)
+        if ts < cutoff or ts > now():
             continue
+        seen = set()
         for item in inc.get("items_unavailable", []):
             pid = item.get("product_id")
-            if not pid:
+            if not pid or pid in seen:
                 continue
+            seen.add(pid)
             a = agg.setdefault(pid, {
                 "name": item.get("product_name", pid), "count": 0, "carts": [],
                 "abandon": 0, "first": ts, "last": ts, "sessions": [],
@@ -127,7 +129,7 @@ def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min
             })
             a["count"] += 1
             a["carts"].append(float(inc.get("cart_total_aed", 0.0)))
-            if not inc.get("order_placed", True):
+            if inc.get("session_status") == "abandoned" or ("session_status" not in inc and not inc.get("order_placed", True)):
                 a["abandon"] += 1
             a["first"] = min(a["first"], ts)
             a["last"] = max(a["last"], ts)
@@ -135,6 +137,8 @@ def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min
                 a["sessions"].append(inc.get("session_id", ""))
             a["hours"][ts.hour] += 1
             for s in inc.get("substitutions_offered", []):
+                if s.get("original_product_id") != pid:
+                    continue
                 a["subs_total"] += 1
                 if s.get("accepted"):
                     a["subs_accepted"] += 1
@@ -163,27 +167,38 @@ def _aggregate_patterns(incidents: list[dict], *, store_id: str, hours: int, min
     return patterns
 
 
-_CANNED_FORECAST = {
-    "predicted_stockout_date": "2026-10-20", "days_until_stockout": 3, "confidence": 0.82,
-    "current_stock": 0, "daily_consumption_rate": 4.5,
-    "evidence": {"model": "BigQuery ML ARIMA_PLUS (mock)", "training_period": "Oct 1–17 2026", "data_points_used": 17},
-}
+def _local_forecast(product_id: str, store_id: str, forecast_days: int) -> dict:
+    from tools.shared.alloydb_client import get_alloydb
+
+    product = get_alloydb().get_product_at_store(product_id, store_id) or {}
+    stock = product.get("stock_quantity", 0)
+    rate = _VELOCITIES.get(product_id, 3.0)
+    days = math.ceil(stock / rate)
+    return {"predicted_stockout_date": (today() + timedelta(days=days)).isoformat(),
+            "days_until_stockout": days, "confidence": 0.82,
+            "current_stock": stock, "daily_consumption_rate": rate,
+            "evidence": {"model": "Synthetic depletion scenario; not BigQuery ML",
+                         "training_period": "One seeded daily-velocity assumption",
+                         "data_points_used": 1, "forecast_horizon_days": forecast_days,
+                         "confidence_note": "Illustrative fixture value, not calibrated statistical confidence"}}
+
+
 _VELOCITIES = {"laban_almarai_1l": 8.5, "milk_almarai_2l": 12.0, "bread_white_loaf": 15.0, "croissant_4pk": 5.0}
 
 
 def _demo_seed_incidents() -> list[dict]:
     """The Mon–Wed 10:00-12:00 brown-rice stockout cluster (shared seed)."""
-    slots = [
-        datetime(2026, 10, 15, 10, 15), datetime(2026, 10, 15, 11, 30),
-        datetime(2026, 10, 16, 10, 5), datetime(2026, 10, 16, 11, 45),
-        datetime(2026, 10, 16, 10, 50), datetime(2026, 10, 17, 10, 20),
-        datetime(2026, 10, 17, 11, 10), datetime(2026, 10, 17, 10, 40),
-    ]
+    slots = [now() - timedelta(hours=h) for h in (40, 38, 28, 26, 25, 12, 10, 8)]
     rows = []
     for i in range(8):
         rows.append({
             "session_id": f"seed_sess_{i:02d}", "customer_id": "sarah_123",
             "store_id": "dubai_marina_01", "timestamp": slots[i].isoformat(),
+            "data_origin": "synthetic_seed",
+            "demand_signals": [{"product_id": "rice_brown_500g", "product_name": "Brown Rice 500g",
+                "outcome": ("compromise" if i < 4 else "rejected" if i < 6 else "satisfied"),
+                "evidence": ("The alternative is okay this time; please restock brown rice." if i < 4 else "No thanks, I only want brown rice." if i < 6 else "I am happy with the alternative."),
+                "certainty": "explicit", "evidence_source": "synthetic_customer_statement"}],
             "items_ordered": [], "items_unavailable": [{"product_id": "rice_brown_500g", "product_name": "Brown Rice 500g"}],
             "substitutions_offered": [{"original_product_id": "rice_brown_500g", "substitute_product_id": "rice_basmati_5kg", "accepted": i % 2 == 0}],
             "cart_total_aed": 285.0, "session_sentiment": "neutral",
@@ -198,6 +213,7 @@ class SqliteBigQueryClient(BigQueryClient):
     only storage differs. Selected when settings.arc_bridge_db is set."""
 
     def __init__(self, db_path: str) -> None:
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db_path = db_path
         # Lock first — the seed loop below calls insert_incident, which locks.
         self._lock = threading.Lock()
@@ -229,19 +245,25 @@ class SqliteBigQueryClient(BigQueryClient):
     def insert_incident(self, incident: dict) -> dict:
         sid = incident.get("session_id") or str(uuid.uuid4())
         record = {**incident, "session_id": sid}
-        # INSERT OR IGNORE = idempotent on session_id (primary key).
+        # Update a session as feedback and checkout arrive; one row per session.
         with self._lock:
+            old = self._conn.execute("SELECT payload FROM arc_incidents WHERE session_id=?", (sid,)).fetchone()
+            if old:
+                record["timestamp"] = json.loads(old[0])["timestamp"]
             self._conn.execute(
-                "INSERT OR IGNORE INTO arc_incidents(session_id, payload) VALUES (?, ?)",
+                "INSERT INTO arc_incidents(session_id, payload) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET payload=excluded.payload",
                 (sid, json.dumps(record)),
             )
-        return {"session_id": sid, "logged": True, "timestamp": datetime.now().isoformat()}
+        return {"session_id": sid, "logged": True, "timestamp": now().isoformat()}
+
+    def list_incidents(self, store_id: str) -> list[dict]:
+        return [r for r in self._all_incidents() if r.get("store_id") == store_id]
 
     def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]:
         return _aggregate_patterns(self._all_incidents(), store_id=store_id, hours=hours, min_incidents=min_incidents)
 
     def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict:
-        return dict(_CANNED_FORECAST)
+        return _local_forecast(product_id, store_id, forecast_days)
 
     def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float:
         return _VELOCITIES.get(product_id, 3.0)
@@ -271,11 +293,11 @@ class RealBigQueryClient(BigQueryClient):
             f"(dataset={settings.bigquery_dataset})."
         )
 
-    def insert_incident(self, incident: dict) -> dict: ...
-    def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]: ...
-    def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict: ...
-    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float: ...
-    def record_substitution_gap(self, *, product_id: str, store_id: str) -> str: ...
+    def insert_incident(self, incident: dict) -> dict: raise NotImplementedError("Google BigQuery integration is pending")
+    def detect_stockout_patterns(self, *, store_id: str, hours: int, min_incidents: int) -> list[dict]: raise NotImplementedError("Google BigQuery integration is pending")
+    def forecast_stockout(self, *, product_id: str, store_id: str, forecast_days: int) -> dict: raise NotImplementedError("Google BigQuery integration is pending")
+    def get_daily_sales_rate(self, *, product_id: str, store_id: str, days: int = 7) -> float: raise NotImplementedError("Google BigQuery integration is pending")
+    def record_substitution_gap(self, *, product_id: str, store_id: str) -> str: raise NotImplementedError("Google BigQuery integration is pending")
 
 
 _client: BigQueryClient | None = None

@@ -1,131 +1,61 @@
-"""place_order — SPEC-ARIA-08.
-
-Writes the confirmed order to AlloyDB (mock adapter). Only called after
-explicit customer confirmation (the agent enforces the confirmation phrase).
-"""
-
+"""Validate and commit an authoritative basket in one storage transaction."""
 from __future__ import annotations
 
 import hashlib
 import json
-import time
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from tools.shared.alloydb_client import get_alloydb
-from tools.shared.errors import error
-from tools.shared.logger import get_logger
+from tools.shared.errors import error, is_error
+from tools.shared.pricing import quote_cart, valid_amount
 from tools.shared.rate_limit import limiter
 
-logger = get_logger("aria.place_order")
 router = APIRouter()
 
-# 60-second idempotency window (SPEC-ARIA-08 §9): signature -> (ts, order).
-_IDEMPOTENCY_WINDOW_S = 60
-_recent: dict[str, tuple[float, dict]] = {}
 
-
-def _order_signature(customer_id: str, store_id: str, cart: list[dict], total_aed: float) -> str:
-    payload = json.dumps(
-        {"c": customer_id, "s": store_id,
-         "items": sorted((i["product_id"], i["quantity"]) for i in cart),
-         "t": round(total_aed, 2)},
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def _recent_order(signature: str) -> dict | None:
-    entry = _recent.get(signature)
-    if not entry:
-        return None
-    ts, order = entry
-    if time.time() - ts > _IDEMPOTENCY_WINDOW_S:
-        _recent.pop(signature, None)
-        return None
-    return order
-
-
-def _remember_order(signature: str, order: dict) -> None:
-    _recent[signature] = (time.time(), order)
-
-
-def _format(order: dict, total_aed: float) -> dict:
-    return {
-        "order_id": order["order_id"],
-        "status": order["status"],
-        "total_aed": round(total_aed, 2),
-        "estimated_delivery_window": order["estimated_delivery_window"],
-    }
-
-
-def place_order(
-    customer_id: str,
-    store_id: str,
-    cart: list[dict],
-    promotion_id: str | None,
-    total_aed: float,
-) -> dict:
+def place_order(customer_id: str, store_id: str, cart: list[dict], promotion_id: str | None,
+                total_aed: float, idempotency_key: str | None = None,
+                dietary_preference: str | None = None) -> dict:
+    """Reprice a confirmed basket and atomically reserve stock and write its order.
+    A session idempotency key is durable; legacy callers get a 60-second window.
     """
-    Writes the confirmed order to the AlloyDB orders table, re-verifying and
-    decrementing stock atomically. Returns order_id, status, total_aed,
-    estimated_delivery_window. Only call after explicit customer confirmation.
-    """
-    # ── Validation (SPEC-ARIA-08 §4) ─────────────────────────────────
-    if not cart:
-        return error("VALIDATION_ERROR", "cart is empty")
-    if total_aed is None or total_aed <= 0:
-        return error("VALIDATION_ERROR", "total_aed must be > 0")
-
     db = get_alloydb()
-    if not db.get_customer(customer_id):
-        return error("NOT_FOUND", f"customer {customer_id} not found")
-    if promotion_id and not any(p["promotion_id"] == promotion_id for p in db.list_active_promotions(store_id)):
-        return error("NOT_FOUND", f"promotion {promotion_id} not found")
+    with db.transaction():
+        customer = db.get_customer(customer_id)
+        if not customer:
+            return error("NOT_FOUND", "Customer not found")
+        if not valid_amount(total_aed):
+            return error("VALIDATION_ERROR", "total_aed must be finite and positive")
+        # Validate shape before signing; repeated items are consolidated by quote_cart.
+        if not cart or any(not isinstance(i, dict) or not isinstance(i.get("product_id"), str)
+                           or type(i.get("quantity")) is not int or i["quantity"] <= 0 for i in cart):
+            return error("VALIDATION_ERROR", "Cart requires products with positive integer quantities")
+        key = hashlib.sha256(json.dumps({"customer": customer_id, "store": store_id,
+              "session": idempotency_key, "items": sorted((i["product_id"], i["quantity"]) for i in cart),
+              "promotion": promotion_id, "total": round(total_aed, 2)}, sort_keys=True).encode()).hexdigest()
+        existing = db.find_order(key, max_age_seconds=None if idempotency_key else 60)
+        if existing:
+            return _format(existing)
+        quote = quote_cart(cart, store_id, dietary_preference or customer["dietary_preference"],
+                           promotion_id=promotion_id, select_promotion=False)
+        if is_error(quote):
+            return quote
+        if abs(round(total_aed, 2) - quote["total_aed"]) > 0.001:
+            return error("VALIDATION_ERROR", "Price changed or total is invalid; review an updated quote")
+        for item in quote["items"]:
+            db.decrement_stock(item["product_id"], store_id, item["quantity"])
+        if promotion_id:
+            db.increment_promotion_usage(promotion_id)
+        order = db.insert_order({"customer_id": customer_id, "store_id": store_id,
+                                 "items": quote["items"], "total_aed": quote["total_aed"],
+                                 "promotion_id": promotion_id, "idempotency_key": key})
+        return _format(order)
 
-    # total_aed must match the cart sum within AED 0.01 — unless a promotion
-    # discount is applied (then total is below the raw sum, which is expected).
-    cart_sum = round(sum(i["price_aed"] * i["quantity"] for i in cart), 2)
-    if promotion_id is None and abs(cart_sum - round(total_aed, 2)) > 0.01:
-        return error("VALIDATION_ERROR", f"total_aed {total_aed} does not match cart sum {cart_sum}")
-    if promotion_id is not None and round(total_aed, 2) > cart_sum + 0.01:
-        return error("VALIDATION_ERROR", "total_aed exceeds cart sum")
 
-    # Idempotency: same customer + same cart within 60s returns the prior order.
-    signature = _order_signature(customer_id, store_id, cart, total_aed)
-    existing = _recent_order(signature)
-    if existing:
-        logger.info("place_order", tool="place_order", order_id=existing["order_id"],
-                    idempotent=True, status="success")
-        return _format(existing, total_aed)
-
-    # Re-verify stock at order time for every item (SPEC-ARIA-08 §3).
-    for item in cart:
-        row = db.get_product_at_store(item["product_id"], store_id)
-        have = row["stock_quantity"] if row else 0
-        if have < item["quantity"]:
-            return error("VALIDATION_ERROR", f"insufficient stock for {item['product_id']} (have {have}, need {item['quantity']})")
-
-    # Atomic-ish: in the mock, decrement after the full check passed so a
-    # mid-loop failure can't partially decrement. Real impl wraps a DB txn.
-    for item in cart:
-        db.decrement_stock(item["product_id"], store_id, item["quantity"])
-
-    order = db.insert_order(
-        {
-            "customer_id": customer_id,
-            "store_id": store_id,
-            "items": cart,
-            "total_aed": round(total_aed, 2),
-            "promotion_id": promotion_id,
-        }
-    )
-    _remember_order(signature, order)
-    logger.info("place_order", tool="place_order", order_id=order["order_id"],
-                customer_id=customer_id, total_aed=round(total_aed, 2),
-                items_count=len(cart), status="success")
-    return _format(order, total_aed)
+def _format(order: dict) -> dict:
+    return {k: order[k] for k in ("order_id", "status", "total_aed", "estimated_delivery_window")}
 
 
 class PlaceOrderRequest(BaseModel):
@@ -133,10 +63,11 @@ class PlaceOrderRequest(BaseModel):
     store_id: str
     cart: list[dict]
     promotion_id: str | None = None
-    total_aed: float
+    total_aed: float = Field(gt=0, allow_inf_nan=False)
+    idempotency_key: str | None = None
 
 
 @router.post("/tools/place-order")
 @limiter.limit("10/minute")
 async def place_order_endpoint(request: Request, req: PlaceOrderRequest) -> dict:
-    return place_order(req.customer_id, req.store_id, req.cart, req.promotion_id, req.total_aed)
+    return place_order(req.customer_id, req.store_id, req.cart, req.promotion_id, req.total_aed, req.idempotency_key)

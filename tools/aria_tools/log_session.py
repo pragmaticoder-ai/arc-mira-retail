@@ -8,12 +8,12 @@ no order was placed. Idempotent on session_id.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from tools.shared.bigquery_client import get_bigquery
+from tools.shared.clock import now
 from tools.shared.errors import error
 from tools.shared.logger import get_logger
 from tools.shared.rate_limit import limiter
@@ -38,6 +38,7 @@ def log_session(
     sentiment: str,
     order_placed: bool,
     abandonment_reason: str | None = None,
+    *, demand_signals: list[dict] | None = None, requested_items: list[str] | None = None,
 ) -> dict:
     """
     Writes the complete session summary to the BigQuery incidents table — the
@@ -60,11 +61,14 @@ def log_session(
     if budget_aed is not None and budget_aed < 0:
         return error("VALIDATION_ERROR", "budget_aed must be >= 0")
 
-    incident = {
+    incident: dict = {
         "session_id": session_id,
         "customer_id": customer_id,
         "store_id": store_id,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now().isoformat(),
+        "demand_signals": demand_signals or [],
+        "requested_items": requested_items or [],
+        "session_status": "completed" if order_placed else "abandoned" if abandonment_reason else "active",
         "items_ordered": items_ordered or [],
         "items_unavailable": items_unavailable or [],
         "substitutions_offered": substitutions or [],
@@ -76,6 +80,9 @@ def log_session(
         "order_placed": bool(order_placed),
         "abandonment_reason": abandonment_reason,
     }
+    from tools.shared.demand import OUTCOMES
+    if any(s.get("outcome") not in OUTCOMES or not s.get("product_id") for s in incident["demand_signals"]):
+        return error("VALIDATION_ERROR", "Invalid demand evidence")
     res = get_bigquery().insert_incident(incident)
     logger.info(
         "log_session",

@@ -65,19 +65,23 @@ def draft_purchase_order(
             "urgency": urgency,
             "justification": justification,
             "revenue_at_risk_aed": round(revenue_at_risk_aed, 2),
+            "revenue_recoverable_aed": round(revenue_recoverable_aed, 2),
+            "evidence_summary": evidence_summary,
+            "product_name": product["product_name"],
+            "human_approval_required": True,
         }
     )
     result = {
         "po_id": po["po_id"],
         "product_id": product_id,
         "product_name": product["product_name"],
-        "quantity": quantity,
-        "urgency": urgency,
-        "justification": justification,
-        "revenue_at_risk_aed": round(revenue_at_risk_aed, 2),
-        "revenue_recoverable_aed": round(revenue_recoverable_aed, 2),
-        "evidence_summary": evidence_summary,
-        "status": "pending",
+        "quantity": po["quantity"],
+        "urgency": po.get("urgency", urgency),
+        "justification": po.get("justification", justification),
+        "revenue_at_risk_aed": po.get("revenue_at_risk_aed", 0),
+        "revenue_recoverable_aed": po.get("revenue_recoverable_aed", 0),
+        "evidence_summary": po.get("evidence_summary", ""),
+        "status": po["status"],
         "human_approval_required": True,
         "created_at": po["created_at"],
     }
@@ -86,7 +90,7 @@ def draft_purchase_order(
         tool="draft_purchase_order",
         po_id=po["po_id"],
         product_id=product_id,
-        status="pending",
+        status=po["status"],
     )
     return result
 

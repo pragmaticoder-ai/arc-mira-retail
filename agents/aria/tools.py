@@ -7,6 +7,9 @@ instructions — ARCHITECTURE.md §2).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from google.adk.tools import FunctionTool
 
 from tools.aria_tools.apply_promotion import apply_promotion
@@ -19,7 +22,7 @@ from tools.aria_tools.parse_intent import parse_intent
 from tools.aria_tools.place_order import place_order
 from tools.aria_tools.suggest_substitution import suggest_substitution
 
-ARIA_FUNCTIONS = [
+ARIA_FUNCTIONS: list[Callable[..., Any]] = [
     parse_intent,
     get_customer_context,
     build_cart,

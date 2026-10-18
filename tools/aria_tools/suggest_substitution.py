@@ -91,7 +91,7 @@ def suggest_substitution(
         query_text=product_document(original),
         store_id=store_id,
         dietary_preference=dietary_preference,
-        max_price_aed=max(max_price_aed, band_ceiling),
+        max_price_aed=max_price_aed,
         min_price_aed=0.0,
         exclude_product_id=product_id,
         limit=10,

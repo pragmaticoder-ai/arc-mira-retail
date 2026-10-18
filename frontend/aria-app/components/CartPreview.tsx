@@ -12,7 +12,7 @@ interface CartPreviewProps {
 }
 
 export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
-  const { items, total_aed, promotion } = useCart()
+  const { items, total_aed, promotion, removeProduct, quoteId } = useCart()
   if (items.length === 0) return null
 
   return (
@@ -35,6 +35,7 @@ export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
             <span className="ml-2 tabular-nums text-slate-600">
               {(i.price_aed * i.quantity).toFixed(2)}
             </span>
+            <button disabled={confirming} onClick={() => removeProduct(i.product_id)} aria-label={`Remove ${i.product_name}`} className="ml-2 text-xs text-slate-500">Remove</button>
           </li>
         ))}
       </ul>
@@ -57,7 +58,7 @@ export function CartPreview({ onConfirm, confirming }: CartPreviewProps) {
         disabled={confirming}
         className="btn-primary w-full"
       >
-        {confirming ? 'Placing order…' : 'Confirm order'}
+        {confirming ? 'Updating…' : quoteId ? 'Confirm order' : 'Review updated basket'}
       </button>
     </div>
   )

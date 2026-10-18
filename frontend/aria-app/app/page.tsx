@@ -6,6 +6,7 @@
 // share cart state via CartContext.
 
 import { useState } from 'react'
+import { useCart } from '@/context/CartContext'
 import { NavBar } from '@/components/NavBar'
 import { CategorySidebar } from '@/components/CategorySidebar'
 import { ProductGrid } from '@/components/ProductGrid'
@@ -14,6 +15,7 @@ import { DEFAULT_CUSTOMER } from '@/lib/mockData'
 import type { Category } from '@/lib/types'
 
 export default function StorePage() {
+  const { reset } = useCart()
   const [storeId, setStoreId] = useState(DEFAULT_CUSTOMER.preferred_store)
   const [category, setCategory] = useState<Category | 'all'>('all')
   const [halalOnly, setHalalOnly] = useState(false)
@@ -21,8 +23,8 @@ export default function StorePage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <NavBar storeId={storeId} onStoreChange={setStoreId} />
-      <div className="flex flex-1 overflow-hidden">
+      <NavBar storeId={storeId} onStoreChange={(id) => { reset(); setStoreId(id) }} />
+      <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         <CategorySidebar
           active={category}
           onSelect={setCategory}
@@ -37,7 +39,7 @@ export default function StorePage() {
           maxBudget={maxBudget}
           storeId={storeId}
         />
-        <AriaPanel storeId={storeId} customerId={DEFAULT_CUSTOMER.customer_id} />
+        <AriaPanel key={storeId} storeId={storeId} customerId={DEFAULT_CUSTOMER.customer_id} />
       </div>
     </div>
   )

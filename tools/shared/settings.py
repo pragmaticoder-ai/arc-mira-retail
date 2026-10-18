@@ -2,14 +2,15 @@
 
 All configuration comes from environment variables so the same code runs
 locally (mock mode) and in Cloud Run (real GCP, values from Secret Manager).
-Nothing is hardcoded. Flip USE_MOCK=false and supply real GCP settings to
-switch every adapter from mock to live — no code changes.
+USE_MOCK=true runs the functional local prototype. Real Google adapter and
+agent execution are deferred; USE_MOCK=false does not enable a working backend.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def _bool(key: str, default: bool) -> bool:
@@ -54,6 +55,10 @@ class Settings:
     # takes over unchanged when USE_MOCK=false.
     arc_bridge_db: str | None = os.getenv("ARC_BRIDGE_DB") or None
 
+    # Shared operational state (sessions, inventory, decisions, orders).
+    arc_state_db: str | None = os.getenv("ARC_STATE_DB") or (str(os.getenv("ARC_BRIDGE_DB")) + ".state" if os.getenv("ARC_BRIDGE_DB") else None)
+    demo_date: str | None = os.getenv("DEMO_DATE") or None
+
     # ── Vertex AI / Gemini ───────────────────────────────────────────
     vertex_ai_location: str = os.getenv("VERTEX_AI_LOCATION", "asia-southeast1")
     gemini_pro_model: str = os.getenv("GEMINI_PRO_MODEL", "gemini-1.5-pro")
@@ -68,6 +73,10 @@ class Settings:
     # ── Environment ──────────────────────────────────────────────────
     environment: str = os.getenv("ENVIRONMENT", "development")
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+
+    def __post_init__(self) -> None:
+        if self.arc_state_db and self.arc_bridge_db and Path(self.arc_state_db).resolve() == Path(self.arc_bridge_db).resolve():
+            raise ValueError("ARC_STATE_DB and ARC_BRIDGE_DB must use different files")
 
 
 settings = Settings()

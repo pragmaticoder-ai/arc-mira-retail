@@ -20,7 +20,7 @@ MOCK_STORES = [
     {"store_id": "al_barsha_01", "store_name": "MIRA Al Barsha", "area": "Al Barsha", "city": "Dubai"},
 ]
 
-MOCK_CUSTOMERS = [
+MOCK_CUSTOMERS: list[dict] = [
     {"customer_id": "sarah_123", "name": "Sarah", "email": "sarah@example.ae", "dietary_preference": "halal", "household_size": 4, "weekly_budget_aed": 300.0, "preferred_store": "dubai_marina_01",
      "last_orders": [
          {"product_id": "rice_basmati_5kg", "product_name": "India Gate Basmati Rice 5kg", "last_ordered": "2026-10-10"},
@@ -36,9 +36,9 @@ MOCK_CUSTOMERS = [
 ]
 
 # Representative inventory slice. dietary_flags is comma-separated like the DDL.
-MOCK_INVENTORY = [
+MOCK_INVENTORY: list[dict] = [
     {"product_id": "milk_almarai_2l", "product_name": "Almarai Full Fat Milk 2L", "category": "dairy", "brand": "Almarai", "price_aed": 12.0, "dietary_flags": "halal,vegetarian", "store_id": STORE_ID, "aisle_ref": "A2", "stock_quantity": 40, "reorder_threshold": 10, "discount_active": False, "is_perishable": True, "expiry_date": "2026-10-24"},
-    {"product_id": "laban_almarai_1l", "product_name": "Almarai Laban 1L", "category": "dairy", "brand": "Almarai", "price_aed": 8.0, "dietary_flags": "halal,vegetarian", "store_id": STORE_ID, "aisle_ref": "A2", "stock_quantity": 48, "reorder_threshold": 12, "discount_active": True, "discount_pct": 25, "discounted_price_aed": 6.0, "is_perishable": True, "expiry_date": "2026-10-19"},
+    {"product_id": "laban_almarai_1l", "product_name": "Almarai Laban 1L", "category": "dairy", "brand": "Almarai", "price_aed": 8.0, "dietary_flags": "halal,vegetarian", "store_id": STORE_ID, "aisle_ref": "A2", "stock_quantity": 48, "reorder_threshold": 12, "discount_active": False, "discount_pct": 25, "discounted_price_aed": 6.0, "is_perishable": True, "expiry_date": "2026-10-19"},
     {"product_id": "eggs_dozen", "product_name": "Fresh Eggs Dozen", "category": "dairy", "brand": "Al Jazeera", "price_aed": 13.0, "dietary_flags": "halal,vegetarian", "store_id": STORE_ID, "aisle_ref": "A2", "stock_quantity": 50, "reorder_threshold": 15, "discount_active": False, "is_perishable": True, "expiry_date": "2026-11-05"},
     {"product_id": "rice_basmati_5kg", "product_name": "India Gate Basmati Rice 5kg", "category": "grains", "brand": "India Gate", "price_aed": 45.0, "dietary_flags": "halal,vegetarian,vegan", "store_id": STORE_ID, "aisle_ref": "B1", "stock_quantity": 22, "reorder_threshold": 8, "discount_active": False, "is_perishable": False},
     {"product_id": "rice_brown_500g", "product_name": "Brown Rice 500g", "category": "grains", "brand": "Organic Larder", "price_aed": 9.5, "dietary_flags": "halal,vegetarian,vegan", "store_id": STORE_ID, "aisle_ref": "B1", "stock_quantity": 0, "reorder_threshold": 10, "discount_active": False, "is_perishable": False},
@@ -60,7 +60,7 @@ MOCK_INVENTORY = [
     {"product_id": "milk_almarai_2l", "product_name": "Almarai Full Fat Milk 2L", "category": "dairy", "brand": "Almarai", "price_aed": 12.0, "dietary_flags": "halal,vegetarian", "store_id": "jbr_01", "aisle_ref": "A2", "stock_quantity": 30, "reorder_threshold": 10, "discount_active": False, "is_perishable": True, "expiry_date": "2026-10-24"},
 ]
 
-MOCK_PROMOTIONS = [
+MOCK_PROMOTIONS: list[dict] = [
     {"promotion_id": "promo_dairy_saver", "name": "Dairy saver pack", "description": "15% off dairy over AED 40", "category": "dairy", "dietary_filter": None, "discount_pct": 15.0, "discount_flat_aed": None, "min_cart_aed": 40.0, "max_uses": None, "times_applied": 0, "valid_from": "2026-10-01", "valid_until": "2026-10-31", "is_active": True},
     {"promotion_id": "promo_rice_10", "name": "Rice 10% off", "description": "10% off rice & grains", "category": "grains", "dietary_filter": None, "discount_pct": 10.0, "discount_flat_aed": None, "min_cart_aed": 50.0, "max_uses": None, "times_applied": 0, "valid_from": "2026-10-01", "valid_until": "2026-10-31", "is_active": True},
     {"promotion_id": "promo_halal_bundle", "name": "Halal chicken bundle", "description": "Save on halal poultry", "category": "halal_meat", "dietary_filter": "halal", "discount_pct": 12.0, "discount_flat_aed": None, "min_cart_aed": 80.0, "max_uses": 100, "times_applied": 0, "valid_from": "2026-10-01", "valid_until": "2026-10-31", "is_active": True},
@@ -73,7 +73,7 @@ MOCK_PROMOTIONS = [
 
 # Replenishment schedules (mirror data/seed/04_replenishment.sql).
 # The brown-rice Tuesday-14:00 gap vs Mon–Wed peak is the demo root cause.
-MOCK_REPLENISHMENT = [
+MOCK_REPLENISHMENT: list[dict] = [
     {"store_id": STORE_ID, "product_id": "rice_brown_500g", "supplier_id": "sup_004", "delivery_day": "Tuesday", "delivery_time": "14:00", "quantity_per_delivery": 40, "lead_time_days": 2},
     {"store_id": STORE_ID, "product_id": "rice_basmati_5kg", "supplier_id": "sup_004", "delivery_day": "Monday", "delivery_time": "09:00", "quantity_per_delivery": 30, "lead_time_days": 2},
     {"store_id": STORE_ID, "product_id": "milk_almarai_2l", "supplier_id": "sup_001", "delivery_day": "Daily", "delivery_time": "06:00", "quantity_per_delivery": 60, "lead_time_days": 1},

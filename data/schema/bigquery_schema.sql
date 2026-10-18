@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS arc_dataset.incidents (
 
     items_ordered           JSON,   -- [{product_id, product_name, quantity, price_aed}]
     items_unavailable       JSON,   -- [{product_id, product_name}]
+    demand_signals          JSON,   -- [{product_id, outcome, evidence, evidence_source, certainty}]
+    requested_items         JSON,   -- explicitly requested original product IDs
+    session_status          STRING, -- active | completed | abandoned
     substitutions_offered   JSON,   -- [{original_product_id, substitute_product_id, accepted}]
 
     promotion_id            STRING,

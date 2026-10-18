@@ -76,8 +76,8 @@ def build_cart(
         if not cat_products:
             continue
         cat_products.sort(key=lambda p: p["price_aed"])
-        in_stock = [p for p in cat_products if p["stock_quantity"] > 0]
-        oos = [p for p in cat_products if p["stock_quantity"] <= 0]
+        in_stock = [p for p in cat_products if p["stock_quantity"] >= mult]
+        oos = [p for p in cat_products if p["stock_quantity"] < mult]
 
         if in_stock:
             p = in_stock[0]
@@ -87,7 +87,7 @@ def build_cart(
                 else p["price_aed"]
             )
             # Stay within budget as we add items.
-            if total + price * mult > budget_aed and items:
+            if total + price * mult > budget_aed:
                 continue
             items.append(
                 {

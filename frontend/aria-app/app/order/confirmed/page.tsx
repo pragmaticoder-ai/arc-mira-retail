@@ -8,7 +8,9 @@ import Link from 'next/link'
 import { useCart } from '@/context/CartContext'
 
 export default function OrderConfirmedPage() {
-  const { order, items, total_aed, promotion } = useCart()
+  const { order, items, total_aed, promotion, reset } = useCart()
+
+  if (!order) return <main className="flex min-h-screen items-center justify-center bg-slate-50 p-md"><div className="text-center"><h1 className="text-xl">No confirmed order</h1><Link href="/" onClick={reset} className="btn-primary mt-md block">Return to the store</Link></div></main>
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-md">
@@ -31,7 +33,7 @@ export default function OrderConfirmedPage() {
 
         <div className="mb-md rounded-md bg-mira-50 p-md text-sm">
           <div className="mb-1 flex justify-between text-slate-600">
-            <span>{items.length || 9} items</span>
+            <span>{items.length} items</span>
             <span className="tabular-nums">
               AED {(promotion ? total_aed + promotion.discount_aed : total_aed || 0).toFixed(2)}
             </span>
@@ -47,7 +49,7 @@ export default function OrderConfirmedPage() {
             <span className="text-green-600">Free</span>
           </div>
           <div className="flex justify-between border-t border-mira-100 pt-sm text-base font-medium text-slate-800">
-            <span>Total paid</span>
+            <span>Order total</span>
             <span className="tabular-nums">AED {(order?.total_aed ?? total_aed).toFixed(2)}</span>
           </div>
         </div>
@@ -55,16 +57,16 @@ export default function OrderConfirmedPage() {
         <div className="mb-md flex items-center gap-2 rounded-md bg-slate-100 p-md text-sm text-slate-600">
           <span aria-hidden="true" className="text-lg">🚚</span>
           <span>
-            Delivery {order?.estimated_delivery_window ?? 'Today, 6:00–8:00 PM'}
+            Delivery {order.estimated_delivery_window}
           </span>
         </div>
 
         <div className="mb-md rounded-md border border-amber-200 bg-amber-50 p-md text-sm text-amber-800">
-          ARIA logged this session. If anything was unavailable, PULSE will flag
+          This is a local prototype order. ARIA recorded this session and its original product preferences. If anything was unavailable, PULSE will flag
           it to the store manager automatically.
         </div>
 
-        <Link href="/" className="btn-primary block w-full text-center">
+        <Link href="/" onClick={reset} className="btn-primary block w-full text-center">
           Continue shopping
         </Link>
       </div>

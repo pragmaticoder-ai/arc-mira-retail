@@ -7,12 +7,11 @@ the tools are implemented (SPEC-PULSE-01..06).
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from tools.shared.auth import verify_iam_token
 from tools.shared.logger import get_logger
-from tools.shared.rate_limit import limiter
+from tools.shared.rate_limit import handle_rate_limit, limiter
 
 logger = get_logger("pulse_tools")
 
@@ -22,7 +21,7 @@ app = FastAPI(
     description="PULSE agent tool functions for MIRA Retail",
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, handle_rate_limit)
 
 # ── Tool routers (each guarded by IAM auth) ──────────────────────────
 from tools.pulse_tools import (  # noqa: E402

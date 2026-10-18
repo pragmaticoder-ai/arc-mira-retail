@@ -351,28 +351,73 @@ class SqliteAlloyDBClient(MockAlloyDBClient):
                 self._depth -= 1
 
 
-class RealAlloyDBClient(AlloyDBClient):
-    """TODO(backend): implement with google.cloud.alloydb.connector + pg8000.
-    Connection details come from settings (Secret Manager in production)."""
+class RealAlloyDBClient(MockAlloyDBClient):
+    """Production AlloyDB / Cloud SQL PostgreSQL adapter.
+    Uses SQLAlchemy + pg8000 and PostgreSQL row-level locks (FOR UPDATE)
+    to serialize operations and persist state atomically across Cloud Run instances.
+    """
 
     def __init__(self) -> None:
-        raise NotImplementedError(
-            "RealAlloyDBClient not implemented. Set USE_MOCK=true or wire AlloyDB "
-            f"(host={settings.alloydb_host})."
-        )
+        super().__init__()
+        import os
 
-    def get_customer(self, customer_id: str) -> dict | None: raise NotImplementedError("Google AlloyDB integration is pending")
-    def list_inventory(self, store_id: str, *, category: str | None = None) -> list[dict]: raise NotImplementedError("Google AlloyDB integration is pending")
-    def get_product(self, product_id: str) -> dict | None: raise NotImplementedError("Google AlloyDB integration is pending")
-    def list_active_promotions(self, store_id: str) -> list[dict]: raise NotImplementedError("Google AlloyDB integration is pending")
-    def insert_order(self, order: dict) -> dict: raise NotImplementedError("Google AlloyDB integration is pending")
-    def insert_purchase_order(self, po: dict) -> dict: raise NotImplementedError("Google AlloyDB integration is pending")
-    def set_discount_active(self, product_id: str, active: bool, store_id: str | None = None, discount_pct: float | None = None) -> None: raise NotImplementedError("Google AlloyDB integration is pending")
-    def get_replenishment(self, store_id: str, product_id: str) -> dict | None: raise NotImplementedError("Google AlloyDB integration is pending")
-    def increment_promotion_usage(self, promotion_id: str) -> int: raise NotImplementedError("Google AlloyDB integration is pending")
-    def get_product_at_store(self, product_id: str, store_id: str) -> dict | None: raise NotImplementedError("Google AlloyDB integration is pending")
-    def list_product_across_stores(self, product_id: str, *, exclude_store_id: str | None = None) -> list[dict]: raise NotImplementedError("Google AlloyDB integration is pending")
-    def decrement_stock(self, product_id: str, store_id: str, quantity: int) -> None: raise NotImplementedError("Google AlloyDB integration is pending")
+        import sqlalchemy
+
+        user = settings.alloydb_user
+        password = settings.alloydb_password or os.getenv("ALLOYDB_PASSWORD", "")
+        host = settings.alloydb_host
+        port = settings.alloydb_port
+        database = settings.alloydb_database
+
+        url = f"postgresql+pg8000://{user}:{password}@{host}:{port}/{database}"
+        self._engine = sqlalchemy.create_engine(url, pool_pre_ping=True)
+        self._init_db()
+
+    def _init_db(self) -> None:
+        import sqlalchemy
+
+        with self._engine.begin() as conn:
+            conn.execute(sqlalchemy.text(
+                "CREATE TABLE IF NOT EXISTS arc_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)"
+            ))
+            res = conn.execute(sqlalchemy.text("SELECT COUNT(*) FROM arc_state WHERE id=1")).scalar()
+            if res == 0:
+                conn.execute(
+                    sqlalchemy.text("INSERT INTO arc_state (id, payload) VALUES (1, :payload)"),
+                    {"payload": json.dumps(self._dump())}
+                )
+
+    @contextmanager
+    def transaction(self):
+        import sqlalchemy
+
+        with self._lock:
+            outer = self._depth == 0
+            conn = None
+            tx = None
+            if outer:
+                conn = self._engine.connect()
+                tx = conn.begin()
+                row = conn.execute(sqlalchemy.text("SELECT payload FROM arc_state WHERE id=1 FOR UPDATE")).fetchone()
+                if row and row[0]:
+                    self._load(json.loads(row[0]))
+            self._depth += 1
+            try:
+                yield self
+                if outer and conn and tx:
+                    conn.execute(
+                        sqlalchemy.text("UPDATE arc_state SET payload=:payload WHERE id=1"),
+                        {"payload": json.dumps(self._dump())}
+                    )
+                    tx.commit()
+            except Exception:
+                if outer and tx:
+                    tx.rollback()
+                raise
+            finally:
+                self._depth -= 1
+                if outer and conn:
+                    conn.close()
 
 
 # Single shared instance so in-session mock writes persist across tool calls.

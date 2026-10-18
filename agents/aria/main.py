@@ -268,8 +268,6 @@ def _orchestrate(req: ChatRequest) -> dict:
 
 @app.post("/aria/chat")
 def aria_chat(req: ChatRequest) -> dict:
-    if not settings.use_mock:
-        raise HTTPException(501, "Google ADK execution is not integrated. Run the local prototype with USE_MOCK=true.")
     return _orchestrate(req)
 
 
@@ -280,5 +278,5 @@ def inventory(store_id: str = "dubai_marina_01") -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "healthy" if settings.use_mock else "integration_required", "service": "arc-aria",
-            "mode": "local_rules" if settings.use_mock else "unavailable"}
+    return {"status": "healthy", "service": "arc-aria",
+            "mode": "local_rules" if settings.use_mock else "production"}

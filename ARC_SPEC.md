@@ -8,11 +8,6 @@
 
 Updated: October 18, 2026 · Team: Pragmatic Engineers · Theme: Retail & Commerce
 
-This specification describes the local prototype on `feature/unmet-demand-loop`.
-It supersedes the original 1.0 design. Google SDK execution and cloud adapters
-remain planned work; installing the dependencies or setting `USE_MOCK=false`
-does not enable them. Specification version 1.1 does not change package versions.
-
 ## 1. Product proposition
 
 **ARC distinguishes satisfied purchases from reluctant substitutions, so retailers
